@@ -1,0 +1,90 @@
+# MATLAB gitignore
+
+# MATLAB临时文件
+*.m~
+*.mat~
+*.fig~
+
+# MATLAB自动保存文件
+*.asv
+
+# MATLAB编译文件
+*.mex*
+*.p
+
+# MATLAB缓存文件
+*.slxc
+slprj/
+
+# MATLAB数据文件（可选 - 根据需要调整）
+*.mat
+
+# MATLAB图形文件（可选 - 根据需要调整）
+*.fig
+
+# MATLAB代码生成文件
+codegen/
+
+# MATLAB Simulink文件
+*.slx.autosave
+*.slx.original
+
+# MATLAB App Designer文件
+*.mlapp~
+
+# MATLAB Live Scripts备份
+*.mlx~
+
+# MATLAB工作区文件
+matlab.mat
+
+# MATLAB Profiler输出
+profile_results/
+
+# MATLAB报告
+html/
+
+# MATLAB发布输出
+**/*_output/
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 临时文件
+*.tmp
+*.temp
+*.log
+
+# 仿真输出数据（项目特定）
+simulation_data/
+results/
+output/
+plots/
+
+# 视频和图像输出
+*.avi
+*.mp4
+*.gif
+*.png
+*.jpg
+*.jpeg
+*.eps
+*.pdf
+
+# 备份文件
+backup/
+*.backup
+*.bak

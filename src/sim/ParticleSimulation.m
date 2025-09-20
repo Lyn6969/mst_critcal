@@ -74,7 +74,7 @@ classdef ParticleSimulation < handle
 
             % === 参数设置 ===
             max_steps = 10;                 % 最大仿真步数
-            dt = 0.1;                       % 时间步长
+            dt_init = 0.1;                       % 时间步长
             repulsion_range = 3;            % 排斥功作用范围
             attraction_decay = 10;          % 吸引力衰减系数
             max_accel = 5;                  % 最大加速度
@@ -123,8 +123,8 @@ classdef ParticleSimulation < handle
                 % 添加噪声和状态更新 [2 x N]
                 noise = (rand(2, num_agents) - 0.5) * 2 * noise_strength;
                 accel = limited_force + noise;
-                vel = vel + accel * dt;
-                pos = pos + vel * dt;
+                vel = vel + accel * dt_init;
+                pos = pos + vel * dt_init;
             end
 
             % === 返回结果 ===
