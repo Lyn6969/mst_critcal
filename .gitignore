@@ -88,3 +88,6 @@ plots/
 backup/
 *.backup
 *.bak
+
+# 论文文件
+*.md
