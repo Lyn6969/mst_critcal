@@ -11,16 +11,21 @@ set(0, 'DefaultTextFontName', 'Arial');
 set(0, 'DefaultLineLineWidth', 1.5);
 
 %% 2. 参数设置
-params.N = 1000;                    % 粒子数量
+params.N = 200;                    % 粒子数量
 params.rho = 1;                    % 粒子密度
 params.v0 = 1;                     % 粒子速度
 params.angleUpdateParameter = 10;    % 角度更新参数
-params.angleNoiseIntensity = 1;    % 角度噪声强度
+params.angleNoiseIntensity = 0;    % 角度噪声强度
 params.T_max = 2000;               % 最大仿真时间步数
 params.dt = 0.1;                   % 时间步长
-params.radius = 5;                 % 邻居查找半径
+params.radius = 10;                 % 邻居查找半径
 params.deac_threshold = 10;        % 取消激活的角度阈值（度）
-params.cj_threshold = 50;          % 激活阈值（度）
+params.cj_threshold = 5;          % 激活阈值（度）
+
+% 固定场地参数
+params.fieldSize = 100;              % 方形场地边长
+params.initDirection = pi/4;        % 45度初始方向
+params.useFixedField = true;        % 启用固定场地模式
 
 % 可视化开关
 enable_visualization = true;
@@ -52,9 +57,19 @@ if enable_visualization
     ax1.LineWidth = 1.2;
     ax1.GridAlpha = 0.15;
     ax1.GridLineStyle = ':';
-    axis([0 simulation.simulationAreaSize 0 simulation.simulationAreaSize]);
-    xticks(0:5:simulation.simulationAreaSize);
-    yticks(0:5:simulation.simulationAreaSize);
+
+    % 智能坐标轴适配
+    if params.useFixedField
+        axis_range = [0 params.fieldSize 0 params.fieldSize];
+        grid_spacing = max(1, params.fieldSize/20);
+    else
+        axis_range = [0 simulation.simulationAreaSize 0 simulation.simulationAreaSize];
+        grid_spacing = max(1, simulation.simulationAreaSize/20);
+    end
+
+    axis(axis_range);
+    xticks(0:grid_spacing:axis_range(2));
+    yticks(0:grid_spacing:axis_range(4));
     xlabel('X Position', 'FontWeight', 'bold');
     ylabel('Y Position', 'FontWeight', 'bold');
     title('Particle Motion & Activation State', 'FontWeight', 'bold', 'FontSize', 12);

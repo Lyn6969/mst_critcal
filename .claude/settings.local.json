@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "mcp__serena__list_dir",
+      "mcp__serena__get_current_config",
+      "mcp__serena__activate_project",
+      "Bash(tree:*)",
+      "mcp__sequential-thinking__sequentialthinking"
     ],
     "deny": [],
     "ask": []

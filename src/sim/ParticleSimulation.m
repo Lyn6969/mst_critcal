@@ -14,8 +14,13 @@ classdef ParticleSimulation < handle
         cj_threshold = 50;   % 激活阈值（度）
 
         % 拓扑邻居选择参数
-        use_topology = false; % 是否使用拓扑邻居选择（false: 基于半径, true: 基于拓扑）
+        use_topology = true; % 是否使用拓扑邻居选择（false: 基于半径, true: 基于拓扑）
         k_neighbors = 7;      % 拓扑邻居选择中的最近邻数量
+
+        % 固定场地参数
+        fieldSize = 50;              % 固定场地大小
+        initDirection = pi/4;        % 统一初始方向 (45度)
+        useFixedField = false;       % 固定场地模式开关
 
         % 粒子状态
         positions;          % [N x 2] 粒子位置
@@ -41,7 +46,14 @@ classdef ParticleSimulation < handle
                     obj.(fields{i}) = params.(fields{i});
                 end
             end
-            obj.simulationAreaSize = sqrt(obj.N / obj.rho);
+
+            % 场地大小设置
+            if obj.useFixedField
+                obj.simulationAreaSize = obj.fieldSize;
+            else
+                obj.simulationAreaSize = sqrt(obj.N / obj.rho);
+            end
+
             obj.initializeParticles();
         end
 
@@ -49,11 +61,20 @@ classdef ParticleSimulation < handle
             % 初始化粒子的位置、方向和状态
             % 使用物理分散方法避免位置重叠
 
-            % 使用randPose方法生成不重叠的初始位置
-            [dispersed_positions, ~] = obj.generateDispersedPositions(obj.N);
-            obj.positions = dispersed_positions';
+            if obj.useFixedField
+                % 固定场地模式：左下角初始化
+                [dispersed_positions, ~] = obj.generateCornerDispersedPositions(obj.N);
+                obj.positions = dispersed_positions';
 
-            obj.theta = rand(obj.N, 1) * 2 * pi;      % 随机分布方向
+                % 统一设置45度方向
+                obj.theta = ones(obj.N, 1) * obj.initDirection;
+            else
+                % 原有模式：全区域随机初始化
+                [dispersed_positions, ~] = obj.generateDispersedPositions(obj.N);
+                obj.positions = dispersed_positions';
+                obj.theta = rand(obj.N, 1) * 2 * pi;      % 随机分布方向
+            end
+
             obj.previousPositions = obj.positions;     % 上一时刻的位置
             obj.isActive = false(obj.N, 1);           % 初始化激活状态
             obj.src_ids = cell(obj.N, 1);             % 初始化源头 ID 数组
@@ -128,6 +149,82 @@ classdef ParticleSimulation < handle
             end
 
             % === 返回结果 ===
+            final_positions = pos;
+            final_velocities = vel;
+        end
+
+        function init_zone_size = calculateInitZoneSize(obj)
+            % 计算初始化区域大小
+            if ~obj.useFixedField
+                init_zone_size = obj.simulationAreaSize * 0.3;
+                return;
+            end
+
+            % 简化公式：初始化区域 = sqrt(粒子数量) * 缩放因子
+            scale_factor = 0.3;
+            init_zone_size = sqrt(obj.N) * scale_factor;
+
+            % 边界限制：不超过场地的一半
+            max_size = obj.fieldSize * 0.5;
+            init_zone_size = min(init_zone_size, max_size);
+        end
+
+        function [final_positions, final_velocities] = generateCornerDispersedPositions(obj, num_agents)
+            % 左下角初始化 + randPose物理分散
+
+            % 计算初始化区域大小
+            init_zone_size = obj.calculateInitZoneSize();
+
+            % 物理分散参数
+            max_steps = 10;
+            dt_init = 0.1;
+            repulsion_range = 3;
+            attraction_decay = 10;
+            max_accel = 5;
+            target_speed = 0;
+            speed_relax = 0.1;
+            noise_strength = 0.5;
+
+            % MATLAB向量化初始化
+            pos = rand(2, num_agents) * init_zone_size;
+            vel = zeros(2, num_agents);
+
+            % 物理分散循环
+            for step = 1:max_steps
+                % 距离矩阵计算
+                dx_mat = pos(1,:) - pos(1,:)';
+                dy_mat = pos(2,:) - pos(2,:)';
+                dist_mat = sqrt(dx_mat.^2 + dy_mat.^2);
+                dist_mat(dist_mat == 0) = inf;
+
+                % 力计算
+                force_mag = (1 - (repulsion_range ./ dist_mat).^2) .* exp(-dist_mat / attraction_decay);
+                dx_unit = dx_mat ./ dist_mat;
+                dy_unit = dy_mat ./ dist_mat;
+
+                fx = sum(force_mag .* dx_unit, 2, 'omitnan')';
+                fy = sum(force_mag .* dy_unit, 2, 'omitnan')';
+                interaction_force = [fx; fy];
+
+                % 速度调节力
+                speeds = vecnorm(vel, 2, 1);
+                speed_error = (target_speed - speeds) / speed_relax;
+                safe_speeds = max(speeds, eps);
+                vel_unit = vel ./ safe_speeds;
+                self_force = vel_unit .* speed_error;
+
+                % 状态更新
+                total_force = self_force + interaction_force;
+                force_mags = vecnorm(total_force, 2, 1);
+                scale_factors = min(max_accel ./ max(force_mags, eps), 1);
+                limited_force = total_force .* scale_factors;
+
+                noise = (rand(2, num_agents) - 0.5) * 2 * noise_strength;
+                accel = limited_force + noise;
+                vel = vel + accel * dt_init;
+                pos = pos + vel * dt_init;
+            end
+
             final_positions = pos;
             final_velocities = vel;
         end
