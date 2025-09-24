@@ -10,11 +10,11 @@ classdef ParticleSimulation < handle
         T_max = 2000;        % 最大仿真时间步数
         dt = 0.1;            % 时间步长
         radius = 5;          % 邻居查找半径
-        deac_threshold = 10; % 取消激活的角度阈值（度）
-        cj_threshold = 50;   % 激活阈值（度）
+        deac_threshold = 10; % 取消激活的角度阈值（弧度）
+        cj_threshold = 50;   % 激活阈值（弧度/时间）
 
         % 拓扑邻居选择参数
-        use_topology = true; % 是否使用拓扑邻居选择（false: 基于半径, true: 基于拓扑）
+        use_topology = false; % 是否使用拓扑邻居选择（false: 基于半径, true: 基于拓扑）
         k_neighbors = 7;      % 拓扑邻居选择中的最近邻数量
 
         % 固定场地参数

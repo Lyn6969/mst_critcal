@@ -15,12 +15,12 @@ params.N = 200;                    % 粒子数量
 params.rho = 1;                    % 粒子密度
 params.v0 = 1;                     % 粒子速度
 params.angleUpdateParameter = 10;    % 角度更新参数
-params.angleNoiseIntensity = 0;    % 角度噪声强度
+params.angleNoiseIntensity = 0.2;    % 角度噪声强度
 params.T_max = 2000;               % 最大仿真时间步数
 params.dt = 0.1;                   % 时间步长
-params.radius = 10;                 % 邻居查找半径
-params.deac_threshold = 10;        % 取消激活的角度阈值（度）
-params.cj_threshold = 5;          % 激活阈值（度）
+params.cj_threshold = 10;          % 激活阈值（弧度/时间）
+params.radius = 5;                 % 邻居查找半径
+params.deac_threshold = 0.1745;    % 取消激活的角度阈值（弧度，约10度）
 
 % 固定场地参数
 params.fieldSize = 100;              % 方形场地边长
