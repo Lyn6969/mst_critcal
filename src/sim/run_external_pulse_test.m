@@ -18,7 +18,7 @@ params.angleUpdateParameter = 10;   % 角度更新参数
 params.angleNoiseIntensity = 0;   % 角度噪声强度
 params.T_max = 400;                 % 减少仿真时间以便观察外源激活
 params.dt = 0.1;                    % 时间步长
-params.cj_threshold = 1;           % 激活阈值
+params.cj_threshold = 0.5;           % 激活阈值
 params.radius = 5;                  % 邻居查找半径
 params.deac_threshold = 0.1745;     % 取消激活阈值
 

@@ -11,6 +11,13 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
         external_target_theta;               % [N x 1] 外源目标角度
         external_activation_timer;           % [N x 1] 剩余独立状态时间
         external_pulse_triggered = false;    % 标记是否已经触发过外源脉冲
+
+        % 级联统计跟踪变量
+        everActivated;                       % [N x 1] 布尔数组，记录整个级联过程中曾被激活的个体（永不重置）
+        cascade_active = false;              % 布尔值，标记级联是否仍在进行
+        steps_since_last_activation = 0;     % 计数器，用于检测级联结束
+        cascade_end_threshold = 5;           % 连续N步无新激活则认为级联结束
+        previous_activated_count = 0;        % 上一步的激活个体总数，用于检测新激活
     end
 
     methods
@@ -22,6 +29,9 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
             obj.isExternallyActivated = false(obj.N, 1);
             obj.external_target_theta = zeros(obj.N, 1);
             obj.external_activation_timer = zeros(obj.N, 1);
+
+            % 初始化级联统计跟踪变量
+            obj.everActivated = false(obj.N, 1);
         end
 
         function triggerExternalPulse(obj)
@@ -29,6 +39,12 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
             if obj.external_pulse_triggered
                 return; % 已经触发过，避免重复触发
             end
+
+            % 初始化级联统计跟踪
+            obj.everActivated = false(obj.N, 1);
+            obj.cascade_active = true;
+            obj.steps_since_last_activation = 0;
+            obj.previous_activated_count = sum(obj.isActive);
 
             % 随机选择个体进行外源激活
             available_indices = 1:obj.N;
@@ -39,6 +55,8 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
 
                 % 设置外源激活状态
                 obj.isExternallyActivated(idx) = true;
+                % 将外源激活个体也标记到级联跟踪中
+                obj.everActivated(idx) = true;
 
                 % 设置目标角度：当前角度 + 90度
                 obj.external_target_theta(idx) = mod(obj.theta(idx) + pi/2, 2*pi);
@@ -51,7 +69,7 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
             end
 
             obj.external_pulse_triggered = true;
-            fprintf('步骤 %d: 外源脉冲触发，激活 %d 个个体\n', ...
+            fprintf('步骤 %d: 外源脉冲触发，激活 %d 个个体，级联跟踪开始\n', ...
                 obj.current_step, obj.external_pulse_count);
         end
 
@@ -223,6 +241,117 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
             % 5. 计算并存储阶参数和激活个体数
             obj.order_parameter(t_step) = norm(sum(exp(1j * obj.theta))) / obj.N;
             obj.activated_counts(t_step) = sum(obj.isActive);
+
+            % === 级联统计更新逻辑 ===
+            if obj.cascade_active
+                % 更新everActivated数组：记录曾经被激活过的个体
+                obj.everActivated = obj.everActivated | obj.isActive;
+
+                % 检测级联是否结束
+                current_activated_count = sum(obj.isActive);
+                if current_activated_count > obj.previous_activated_count
+                    % 有新的激活个体，重置计数器
+                    obj.steps_since_last_activation = 0;
+                    obj.previous_activated_count = current_activated_count;
+                else
+                    % 没有新的激活个体，增加计数器
+                    obj.steps_since_last_activation = obj.steps_since_last_activation + 1;
+                end
+
+                % 判断级联是否结束
+                if obj.steps_since_last_activation >= obj.cascade_end_threshold
+                    obj.cascade_active = false;
+                    cascade_size = sum(obj.everActivated) / obj.N;
+                    fprintf('步骤 %d: 级联结束，最终级联规模 = %.4f (%d/%d)\n', ...
+                        obj.current_step, cascade_size, sum(obj.everActivated), obj.N);
+                end
+            end
+        end
+
+        function cascade_size = getCascadeSize(obj)
+            % 返回当前级联规模（everActivated个体数/总个体数）
+            cascade_size = sum(obj.everActivated) / obj.N;
+        end
+
+        function is_complete = isCascadeComplete(obj)
+            % 判断级联是否完全结束
+            is_complete = ~obj.cascade_active;
+        end
+
+        function resetCascadeTracking(obj)
+            % 重置级联统计跟踪变量，准备下次实验
+            obj.everActivated = false(obj.N, 1);
+            obj.cascade_active = false;
+            obj.steps_since_last_activation = 0;
+            obj.previous_activated_count = 0;
+            obj.external_pulse_triggered = false;
+
+            % 重置外源激活相关状态
+            obj.isExternallyActivated = false(obj.N, 1);
+            obj.external_target_theta = zeros(obj.N, 1);
+            obj.external_activation_timer = zeros(obj.N, 1);
+
+            % 重置粒子激活状态
+            obj.isActive = false(obj.N, 1);
+            obj.src_ids = cell(obj.N, 1);
+            for i = 1:obj.N
+                obj.src_ids{i} = [];
+            end
+
+            fprintf('级联统计跟踪已重置\n');
+        end
+
+        function cascade_size = runSingleExperiment(obj, initial_count)
+            % 运行单次级联实验，支持c1/c2计算
+            % 输入：initial_count - 初发个体数量（1或2）
+            % 输出：cascade_size - 最终级联规模（everActivated个体数/总个体数）
+
+            if nargin < 2
+                initial_count = 1;  % 默认为c1实验（1个初发个体）
+            end
+
+            % 重置系统状态
+            obj.resetCascadeTracking();
+
+            % 重新初始化粒子位置和方向
+            obj.initializeParticles();
+
+            % 设置实验参数
+            original_pulse_count = obj.external_pulse_count;
+            obj.external_pulse_count = initial_count;
+
+            % 重置时间步
+            obj.current_step = 0;
+
+            % 运行稳定期
+            fprintf('开始c%d实验：%d个初发个体\n', initial_count, initial_count);
+            fprintf('运行稳定期（%d步）...\n', obj.stabilization_steps);
+
+            for step = 1:obj.stabilization_steps
+                obj.step();
+            end
+
+            % 触发外源脉冲并继续运行直到级联结束
+            fprintf('稳定期结束，触发外源脉冲...\n');
+            max_cascade_steps = 200;  % 最大级联步数，防止无限循环
+
+            for step = 1:max_cascade_steps
+                obj.step();
+
+                % 检查级联是否结束
+                if obj.isCascadeComplete()
+                    break;
+                end
+            end
+
+            % 获取最终级联规模
+            cascade_size = obj.getCascadeSize();
+
+            % 恢复原始参数
+            obj.external_pulse_count = original_pulse_count;
+
+            fprintf('c%d实验完成：级联规模 = %.4f (%d/%d)，总步数 = %d\n', ...
+                initial_count, cascade_size, sum(obj.everActivated), obj.N, obj.current_step);
         end
 
         function external_count = getExternallyActivatedCount(obj)
