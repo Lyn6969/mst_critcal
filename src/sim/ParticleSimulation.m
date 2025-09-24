@@ -94,7 +94,7 @@ classdef ParticleSimulation < handle
             %   final_velocities - 最终速度矩阵 [2 x num_agents]
 
             % === 参数设置 ===
-            max_steps = 10;                 % 最大仿真步数
+            max_steps = 20;                 % 最大仿真步数
             dt_init = 0.1;                       % 时间步长
             repulsion_range = 3;            % 排斥功作用范围
             attraction_decay = 10;          % 吸引力衰减系数
