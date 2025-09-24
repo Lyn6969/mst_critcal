@@ -292,11 +292,11 @@ classdef ParticleSimulation < handle
                 if obj.isActive(i)
                     % 已激活，更新源头 ID
                     if ismember(obj.src_ids{i}, neibor_idx)  % 检查唯一的源头是否还在邻居中
-                        % 计算与源头的角度差（度）
+                        % 计算与源头的角度差（弧度）
                         src_direction = obj.theta(obj.src_ids{i});
-                        angle_diff_deg = abs(rad2deg(wrapToPi(obj.theta(i) - src_direction)));
+                        angle_diff_rad = abs(wrapToPi(obj.theta(i) - src_direction));
 
-                        if angle_diff_deg < rad2deg(obj.deac_threshold)
+                        if angle_diff_rad < obj.deac_threshold
                             % 取消激活
                             obj.isActive(i) = false;
                             obj.src_ids{i} = [];
@@ -347,13 +347,13 @@ classdef ParticleSimulation < handle
                         current_diff_unit(non_zero_current, :) = current_diff(non_zero_current, :) ./ current_dist(non_zero_current);
                         past_diff_unit(non_zero_past, :) = past_diff(non_zero_past, :) ./ past_dist(non_zero_past);
 
-                        % 计算角度差（度）
+                        % 计算角度差（弧度）
                         angle_cos = sum(past_diff_unit .* current_diff_unit, 2);
                         angle_cos = max(min(angle_cos, 1), -1);
-                        angle_diff_deg_2 = acos(angle_cos);
+                        angle_diff_rad = acos(angle_cos);
 
                         % 计算显著性值 s
-                        s_values = angle_diff_deg_2 / obj.dt;
+                        s_values = angle_diff_rad / obj.dt;
                         % 找出显著性最高的邻居
                         [max_s, max_s_idx] = max(s_values);
 
