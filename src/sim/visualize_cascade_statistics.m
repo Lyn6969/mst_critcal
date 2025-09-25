@@ -1,4 +1,4 @@
-% 增强版级联统计可视化脚本
+﻿% 增强版级联统计可视化脚本
 % 在run_external_pulse_test基础上增加级联统计信息的实时显示
 clc;
 clear;
@@ -14,7 +14,7 @@ set(0, 'DefaultLineLineWidth', 1.5);
 %% 2. 实验模式选择
 fprintf('=== 级联统计可视化系统 ===\n');
 fprintf('选择实验模式：\n');
-fprintf('1 - c1实验（1个初发个体）\n');1
+fprintf('1 - c1实验（1个初发个体）\n');
 fprintf('2 - c2实验（2个初发个体）\n');
 fprintf('3 - 对比实验（先c1后c2）\n');
 
@@ -205,10 +205,11 @@ ylim([0, params.N]);
 xlim([0, params.T_max]);
 
 % 堆叠面积图数据初始化
-time_data = [];
-inactive_data = [];
-active_data = [];
-ever_active_data = [];
+time_data = zeros(1, params.T_max);
+inactive_data = zeros(1, params.T_max);
+active_data = zeros(1, params.T_max);
+ever_active_data = zeros(1, params.T_max);
+area_data_count = 0;  % 记录堆叠面积图的实际采样点
 
 % 创建初始面积图：使用重复时间点确保 X 与 Y 维度匹配
 initial_time = [0 0];
@@ -338,21 +339,23 @@ for t_step = 1:params.T_max
 
         % 5. 更新激活分类图
         subplot(p5);
-        time_data = [time_data, t_step];
+        area_data_count = area_data_count + 1;
+        time_data(area_data_count) = t_step;
         inactive_count = sum(~is_active & ~ever_activated);
         active_only_count = sum(is_active & ~ever_activated) + sum(is_active & ever_activated);
         ever_only_count = sum(ever_activated & ~is_active);
 
-        % 累积数据
-        inactive_data = [inactive_data, inactive_count];
-        active_data = [active_data, active_only_count];
-        ever_active_data = [ever_active_data, ever_only_count];
+        % 累加数据
+        inactive_data(area_data_count) = inactive_count;
+        active_data(area_data_count) = active_only_count;
+        ever_active_data(area_data_count) = ever_only_count;
 
         % 更新面积图
-        if length(time_data) > 1
+        if area_data_count > 1
+            recent_time = time_data(1:area_data_count);
+            recent_stack = [inactive_data(1:area_data_count); active_data(1:area_data_count); ever_active_data(1:area_data_count)];
             delete(area_plot);
-            area_plot = area(time_data, [inactive_data; active_data; ever_active_data]', ...
-                            'LineWidth', 0.5);
+            area_plot = area(recent_time, recent_stack', 'LineWidth', 0.5);
             area_plot(1).FaceColor = [0.7 0.7 0.7];
             area_plot(2).FaceColor = [1 0.8 0];
             area_plot(3).FaceColor = [0.8 0.2 0.2];
@@ -372,6 +375,13 @@ for t_step = 1:params.T_max
 
         set(info_text, 'String', sprintf('%s\n实验模式: %s', main_status, experiment_label));
 
+        % 处理级联活跃状态显示
+        if simulation.cascade_active
+            cascade_status_str = '是';
+        else
+            cascade_status_str = '否';
+        end
+
         % 详细统计
         status_str = sprintf(['当前统计:\n' ...
                             '  • 累计激活(everActivated): %d/%d (%.2f%%)\n' ...
@@ -380,15 +390,7 @@ for t_step = 1:params.T_max
                             '  • 级联活跃: %s'], ...
                             ever_active_count, params.N, cascade_size*100, ...
                             current_active_count, params.N, current_active_count/params.N*100, ...
-                            sum(is_external));
-
-        % 处理级联活跃状态显示
-        if simulation.cascade_active
-            cascade_status_str = '是';
-        else
-            cascade_status_str = '否';
-        end
-        status_str = [status_str, sprintf('\n  • 级联活跃: %s', cascade_status_str)];
+                            sum(is_external), cascade_status_str);
 
         set(status_text, 'String', status_str);
 
@@ -486,3 +488,4 @@ fprintf('• 右上2：传播速率（每步新激活数）\n');
 fprintf('• 右下1：系统序参数演化\n');
 fprintf('• 右下2：激活状态分类统计\n');
 fprintf('• 底部：实时统计信息和c值计算\n');
+
