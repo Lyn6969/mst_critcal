@@ -18,6 +18,9 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
         steps_since_last_activation = 0;     % 计数器，用于检测级联结束
         cascade_end_threshold = 5;           % 连续N步无新激活则认为级联结束
         previous_activated_count = 0;        % 上一步的激活个体总数，用于检测新激活
+
+        % 输出控制
+        logEnabled = false;                  % 是否输出调试与提示信息
     end
 
     methods
@@ -32,6 +35,14 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
 
             % 初始化级联统计跟踪变量
             obj.everActivated = false(obj.N, 1);
+        end
+
+        function setLogging(obj, flag)
+            % 设置是否输出调试信息
+            if nargin < 2
+                flag = true;
+            end
+            obj.logEnabled = logical(flag);
         end
 
         function triggerExternalPulse(obj)
@@ -64,13 +75,17 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
                 % 初始化为强制转向状态（计时器为0表示正在转向）
                 obj.external_activation_timer(idx) = 0;
 
-                fprintf('外源激活个体 %d: 当前角度 %.2f° → 目标角度 %.2f°\n', ...
-                    idx, rad2deg(obj.theta(idx)), rad2deg(obj.external_target_theta(idx)));
+                if obj.logEnabled
+                    fprintf('外源激活个体 %d: 当前角度 %.2f° → 目标角度 %.2f°\n', ...
+                        idx, rad2deg(obj.theta(idx)), rad2deg(obj.external_target_theta(idx)));
+                end
             end
 
             obj.external_pulse_triggered = true;
-            fprintf('步骤 %d: 外源脉冲触发，激活 %d 个个体，级联跟踪开始\n', ...
-                obj.current_step, obj.external_pulse_count);
+            if obj.logEnabled
+                fprintf('步骤 %d: 外源脉冲触发，激活 %d 个个体，级联跟踪开始\n', ...
+                    obj.current_step, obj.external_pulse_count);
+            end
         end
 
         function desired_theta = updateExternallyActivatedParticles(obj, desired_theta)
@@ -88,19 +103,23 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
                     % 覆盖期望角度为目标角度，实现强制转向
                     desired_theta(i) = obj.external_target_theta(i);
 
-                    % 添加调试输出
-                    current_angle = rad2deg(obj.theta(i));
-                    target_angle = rad2deg(obj.external_target_theta(i));
-                    fprintf('步骤 %d: 个体 %d 强制转向 - 当前: %.1f° → 目标: %.1f°\n', ...
-                        obj.current_step, i, current_angle, target_angle);
+                    % 添加调试输出（按需）
+                    if obj.logEnabled
+                        current_angle = rad2deg(obj.theta(i));
+                        target_angle = rad2deg(obj.external_target_theta(i));
+                        fprintf('步骤 %d: 个体 %d 强制转向 - 当前: %.1f° → 目标: %.1f°\n', ...
+                            obj.current_step, i, current_angle, target_angle);
+                    end
 
                     % 检查是否已经转向完成
                     angle_diff = abs(wrapToPi(obj.theta(i) - obj.external_target_theta(i)));
                     if angle_diff < obj.turn_completion_threshold
                         % 转向完成，进入独立状态
                         obj.external_activation_timer(i) = obj.forced_turn_duration;
-                        fprintf('个体 %d 转向完成，进入 %d 步独立状态\n', ...
-                            i, obj.forced_turn_duration);
+                        if obj.logEnabled
+                            fprintf('个体 %d 转向完成，进入 %d 步独立状态\n', ...
+                                i, obj.forced_turn_duration);
+                        end
                     end
 
                 elseif obj.external_activation_timer(i) > 0
@@ -113,7 +132,9 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
                     if obj.external_activation_timer(i) == 0
                         % 独立状态结束，返回正常状态
                         obj.isExternallyActivated(i) = false;
-                        fprintf('个体 %d 结束外源激活状态，返回正常\n', i);
+                        if obj.logEnabled
+                            fprintf('个体 %d 结束外源激活状态，返回正常\n', i);
+                        end
                     end
                 end
             end
@@ -262,8 +283,10 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
                 if obj.steps_since_last_activation >= obj.cascade_end_threshold
                     obj.cascade_active = false;
                     cascade_size = sum(obj.everActivated) / obj.N;
-                    fprintf('步骤 %d: 级联结束，最终级联规模 = %.4f (%d/%d)\n', ...
-                        obj.current_step, cascade_size, sum(obj.everActivated), obj.N);
+                    if obj.logEnabled
+                        fprintf('步骤 %d: 级联结束，最终级联规模 = %.4f (%d/%d)\n', ...
+                            obj.current_step, cascade_size, sum(obj.everActivated), obj.N);
+                    end
                 end
             end
         end
@@ -298,7 +321,9 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
                 obj.src_ids{i} = [];
             end
 
-            fprintf('级联统计跟踪已重置\n');
+            if obj.logEnabled
+                fprintf('级联统计跟踪已重置\n');
+            end
         end
 
         function cascade_size = runSingleExperiment(obj, initial_count)
@@ -324,15 +349,19 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
             obj.current_step = 0;
 
             % 运行稳定期
-            fprintf('开始c%d实验：%d个初发个体\n', initial_count, initial_count);
-            fprintf('运行稳定期（%d步）...\n', obj.stabilization_steps);
+            if obj.logEnabled
+                fprintf('开始c%d实验：%d个初发个体\n', initial_count, initial_count);
+                fprintf('运行稳定期（%d步）...\n', obj.stabilization_steps);
+            end
 
             for step = 1:obj.stabilization_steps
                 obj.step();
             end
 
             % 触发外源脉冲并继续运行直到级联结束
-            fprintf('稳定期结束，触发外源脉冲...\n');
+            if obj.logEnabled
+                fprintf('稳定期结束，触发外源脉冲...\n');
+            end
             max_cascade_steps = 200;  % 最大级联步数，防止无限循环
 
             for step = 1:max_cascade_steps
@@ -350,8 +379,10 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
             % 恢复原始参数
             obj.external_pulse_count = original_pulse_count;
 
-            fprintf('c%d实验完成：级联规模 = %.4f (%d/%d)，总步数 = %d\n', ...
-                initial_count, cascade_size, sum(obj.everActivated), obj.N, obj.current_step);
+            if obj.logEnabled
+                fprintf('c%d实验完成：级联规模 = %.4f (%d/%d)，总步数 = %d\n', ...
+                    initial_count, cascade_size, sum(obj.everActivated), obj.N, obj.current_step);
+            end
         end
 
         function external_count = getExternallyActivatedCount(obj)
