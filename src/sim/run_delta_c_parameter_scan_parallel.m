@@ -42,11 +42,9 @@ progress_step = max(1, floor(total_tasks / 100));  % 至少 1% 更新一次
 
 % 生成输出路径及临时文件名，以便崩溃时恢复
 timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
-output_dir = ensure_data_directory();
-output_filename = fullfile(output_dir, ...
-    sprintf('delta_c_scan_parallel_%s.mat', timestamp));
-temp_filename = fullfile(output_dir, ...
-    sprintf('delta_c_scan_parallel_%s_temp.mat', timestamp));
+output_dir = ensure_data_directory(timestamp);
+output_filename = fullfile(output_dir, 'data.mat');
+temp_filename = fullfile(output_dir, 'temp.mat');
 
 % DataQueue 用于 parfor worker 通知主线程进度
 progress_queue = parallel.pool.DataQueue;
@@ -138,8 +136,7 @@ fprintf('成功率: %.1f%% (c1), %.1f%% (c2)\n', ...
 optimal_cj = cj_thresholds(max_idx);
 fprintf('\nDelta_c 峰值: %.4f (在 cj_threshold = %.2f)\n', max_delta_c, optimal_cj);
 
-quicklook_figure_path = fullfile(output_dir, ...
-    sprintf('delta_c_scan_parallel_%s', timestamp));
+quicklook_figure_path = fullfile(output_dir, 'result');
 render_quicklook_figure(cj_thresholds, c1_mean, c1_sem, ...
     c2_mean, c2_sem, delta_c, optimal_cj, max_delta_c, error_count, ...
     params.N, num_runs, pool.NumWorkers, quicklook_figure_path);
@@ -232,9 +229,9 @@ function result = run_single_experiment(params, exp_type)
     end
 end
 
-function output_dir = ensure_data_directory()
-%ENSURE_DATA_DIRECTORY 若 data 目录不存在则创建。
-    output_dir = fullfile(pwd, 'data');
+function output_dir = ensure_data_directory(timestamp)
+%ENSURE_DATA_DIRECTORY 创建实验数据目录（按时间戳组织）。
+    output_dir = fullfile(pwd, 'data', 'experiments', 'delta_c_scan', timestamp);
     if ~isfolder(output_dir)
         mkdir(output_dir);
     end
