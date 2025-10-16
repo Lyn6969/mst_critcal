@@ -1,16 +1,46 @@
-% 仿真和可视化脚本
-clc;
-clear;
-close all;
+% run_sim 粒子群运动仿真和可视化脚本
+%
+% 功能描述:
+%   该脚本实现了粒子群运动的基础仿真和可视化功能，展示粒子
+%   在二维空间中的集体运动行为和激活传播过程
+%
+% 主要功能:
+%   - 粒子群运动仿真
+%   - 实时可视化显示
+%   - 阶参数和激活个体数统计
+%   - 粒子状态和方向显示
+%
+% 使用方法:
+%   1. 直接运行脚本开始仿真
+%   2. 观察左侧粒子运动和右侧统计图表
+%   3. 仿真结束后可分析阶参数变化趋势
+%
+% 输出结果:
+%   - 实时动画显示粒子运动
+%   - 阶参数随时间变化曲线
+%   - 激活个体数随时间变化曲线
+%
+% 作者：系统生成
+% 日期：2025年
+% 版本：MATLAB 2025a兼容
+
+clc;        % 清除命令行窗口
+clear;      % 清除工作空间变量
+close all;  % 关闭所有图形窗口
 
 %% 1. 设置图形默认属性
-set(0, 'DefaultAxesFontSize', 11);
-set(0, 'DefaultAxesFontName', 'Arial');
-set(0, 'DefaultTextFontSize', 11);
-set(0, 'DefaultTextFontName', 'Arial');
-set(0, 'DefaultLineLineWidth', 1.5);
+% 统一设置图形界面的字体、线宽等属性，确保所有图形具有一致的外观
+
+set(0, 'DefaultAxesFontSize', 11);      % 设置坐标轴字体大小
+set(0, 'DefaultAxesFontName', 'Arial');  % 设置坐标轴字体类型
+set(0, 'DefaultTextFontSize', 11);       % 设置文本字体大小
+set(0, 'DefaultTextFontName', 'Arial');  % 设置文本字体类型
+set(0, 'DefaultLineLineWidth', 1.5);     % 设置线条默认宽度
 
 %% 2. 参数设置
+% 配置粒子仿真系统的各项参数，包括粒子属性、环境参数和仿真控制参数
+
+% 基本粒子参数
 params.N = 200;                    % 粒子数量
 params.rho = 1;                    % 粒子密度
 params.v0 = 1;                     % 粒子速度
@@ -27,11 +57,16 @@ params.fieldSize = 100;              % 方形场地边长
 params.initDirection = pi/4;        % 45度初始方向
 params.useFixedField = true;        % 启用固定场地模式
 
-% 可视化开关
-enable_visualization = true;
+% 可视化控制
+enable_visualization = true;        % 是否启用实时可视化
 
 %% 3. 创建仿真对象
+% 使用预设参数创建粒子仿真对象，该类实现了粒子群运动的核心算法
+
 simulation = ParticleSimulation(params);
+
+%% 4. 创建可视化界面
+% 如果启用可视化，则创建包含三个子图的图形界面：粒子运动显示、阶参数变化和激活个体数变化
 
 if enable_visualization
     % 创建主图形窗口
@@ -138,18 +173,23 @@ if enable_visualization
     main_figure.UserData.plots.activated_count = activated_plot;
 end
 
-%% 4. 主循环进行仿真
+%% 5. 主仿真循环
+% 执行完整的仿真过程，包括粒子状态更新和可视化界面刷新
+
+% 开始计时
 tic;
 
+% 主循环：遍历每个时间步
 for t_step = 1:params.T_max
     % 执行仿真步骤
     simulation.step();
 
-    % 显示进度
+    % 显示进度信息（每100步或最后一步）
     if mod(t_step, 100) == 0 || t_step == params.T_max
         fprintf('Progress: %d/%d steps (%.1f%%)\n', t_step, params.T_max, t_step/params.T_max*100);
     end
 
+    % 更新可视化界面（每2步更新一次，提高性能）
     if enable_visualization && mod(t_step, 2) == 0
         % 获取当前状态
         positions = simulation.positions;
@@ -179,9 +219,11 @@ for t_step = 1:params.T_max
         subplot(p3);
         set(activated_plot, 'XData', 1:t_step, 'YData', simulation.activated_counts(1:t_step));
 
+        % 刷新图形显示
         drawnow limitrate;
     end
 end
 
+% 仿真完成，显示总用时
 fprintf('仿真完成！总用时: %.2f 秒\n', toc);
 

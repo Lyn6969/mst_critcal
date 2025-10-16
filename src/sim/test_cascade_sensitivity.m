@@ -1,12 +1,44 @@
-% 集群敏感性统计功能测试脚本
-% 验证ParticleSimulationWithExternalPulse类的级联统计功能
-clc;
-clear;
-close all;
+% test_cascade_sensitivity 集群敏感性统计功能测试脚本
+%
+% 功能描述:
+%   该脚本用于测试和验证ParticleSimulationWithExternalPulse类的
+%   级联统计功能，确保集群敏感性(Δc)计算的正确性
+%
+% 主要功能:
+%   - 测试单次c1/c2实验功能
+%   - 验证集群敏感性Δc计算
+%   - 批量实验测试统计稳定性
+%   - 级联统计逻辑验证
+%   - 功能完整性检查
+%
+% 测试流程:
+%   1. 单次c1实验测试(1个初发个体)
+%   2. 单次c2实验测试(2个初发个体)
+%   3. Δc计算和验证
+%   4. 批量重复实验测试
+%   5. 级联跟踪逻辑验证
+%   6. 功能完整性检查
+%
+% 输出结果:
+%   - 各项测试结果报告
+%   - 统计稳定性分析
+%   - 参数优化建议
+%
+% 作者：系统生成
+% 日期：2025年
+% 版本：MATLAB 2025a兼容
 
+clc;        % 清除命令行窗口
+clear;      % 清除工作空间变量
+close all;  % 关闭所有图形窗口
+
+% 显示测试标题
 fprintf('=== 集群敏感性统计功能测试 ===\n\n');
 
 %% 1. 测试参数设置
+% 配置用于测试的仿真参数，使用较小的规模便于快速验证
+
+% 基本粒子参数
 params.N = 200;                      % 较小的粒子数量便于验证
 params.rho = 1;                     % 粒子密度
 params.v0 = 1;                      % 粒子速度
@@ -29,6 +61,7 @@ params.external_pulse_count = 1;    % 将在实验中动态修改
 params.forced_turn_duration = 10;   % 较短独立时间
 params.cascade_end_threshold = 3;   % 较快的级联结束检测
 
+% 显示测试参数
 fprintf('测试参数：\n');
 fprintf('  粒子数量: %d\n', params.N);
 fprintf('  场地大小: %d\n', params.fieldSize);
@@ -36,25 +69,34 @@ fprintf('  激活阈值: %.2f\n', params.cj_threshold);
 fprintf('  稳定期: %d步\n', params.stabilization_steps);
 
 %% 2. 创建仿真对象
+% 使用测试参数创建带外源激活功能的粒子仿真对象
+
 simulation = ParticleSimulationWithExternalPulse(params);
 
 %% 3. 测试单次c1实验
+% 测试1个初发个体的级联实验功能
+
 fprintf('\n--- 测试单次c1实验 ---\n');
 c1_size = simulation.runSingleExperiment(1);
 fprintf('c1级联规模: %.4f\n', c1_size);
 
 %% 4. 测试单次c2实验
+% 测试2个初发个体的级联实验功能
+
 fprintf('\n--- 测试单次c2实验 ---\n');
 c2_size = simulation.runSingleExperiment(2);
 fprintf('c2级联规模: %.4f\n', c2_size);
 
 %% 5. 计算集群敏感性
+% 计算并验证集群敏感性Δc = c2 - c1
+
 delta_c = c2_size - c1_size;
 fprintf('\n--- 集群敏感性计算结果 ---\n');
 fprintf('c1 (1个初发): %.4f\n', c1_size);
 fprintf('c2 (2个初发): %.4f\n', c2_size);
 fprintf('Δc = c2 - c1 = %.4f\n', delta_c);
 
+% 验证结果合理性
 if delta_c > 0
     fprintf('✓ c2 > c1，符合预期（更多初发个体产生更大级联）\n');
 else
@@ -62,36 +104,43 @@ else
 end
 
 %% 6. 批量实验测试统计稳定性
+% 通过多次重复实验验证统计结果的稳定性和可靠性
+
 fprintf('\n--- 批量实验测试 ---\n');
-num_trials = 10;
-c1_values = zeros(num_trials, 1);
-c2_values = zeros(num_trials, 1);
+num_trials = 10;  % 重复实验次数
+c1_values = zeros(num_trials, 1);  % 存储c1实验结果
+c2_values = zeros(num_trials, 1);  % 存储c2实验结果
 
 fprintf('运行 %d 次重复实验...\n', num_trials);
 for trial = 1:num_trials
     fprintf('  试验 %d/%d: ', trial, num_trials);
 
+    % 运行c1和c2实验
     c1_values(trial) = simulation.runSingleExperiment(1);
     c2_values(trial) = simulation.runSingleExperiment(2);
 
+    % 显示单次结果
     fprintf('c1=%.3f, c2=%.3f, Δc=%.3f\n', ...
         c1_values(trial), c2_values(trial), c2_values(trial) - c1_values(trial));
 end
 
 % 统计分析
-mean_c1 = mean(c1_values);
-mean_c2 = mean(c2_values);
-std_c1 = std(c1_values);
-std_c2 = std(c2_values);
-mean_delta_c = mean_c2 - mean_c1;
-std_delta_c = std(c2_values - c1_values);
+mean_c1 = mean(c1_values);        % c1平均值
+mean_c2 = mean(c2_values);        % c2平均值
+std_c1 = std(c1_values);          % c1标准差
+std_c2 = std(c2_values);          % c2标准差
+mean_delta_c = mean_c2 - mean_c1;  % 平均Δc
+std_delta_c = std(c2_values - c1_values);  % Δc标准差
 
+% 显示统计分析结果
 fprintf('\n--- 统计分析结果 ---\n');
 fprintf('c1: %.4f ± %.4f (均值 ± 标准差)\n', mean_c1, std_c1);
 fprintf('c2: %.4f ± %.4f (均值 ± 标准差)\n', mean_c2, std_c2);
 fprintf('平均Δc: %.4f ± %.4f\n', mean_delta_c, std_delta_c);
 
 %% 7. 验证级联统计逻辑
+% 详细测试级联跟踪功能的正确性，包括状态更新和触发机制
+
 fprintf('\n--- 级联统计逻辑验证 ---\n');
 
 % 测试重置功能
@@ -148,9 +197,11 @@ final_cascade_size = simulation.getCascadeSize();
 fprintf('最终级联规模: %.4f (%d/%d)\n', final_cascade_size, sum(simulation.everActivated), simulation.N);
 
 %% 8. 功能完整性检查
+% 检查所有核心方法是否正常工作，确保API的完整性
+
 fprintf('\n--- 功能完整性检查 ---\n');
 
-% 检查必要方法是否存在并正常工作
+% 检查getCascadeSize方法
 try
     test_size = simulation.getCascadeSize();
     fprintf('✓ getCascadeSize(): %.4f\n', test_size);
@@ -158,6 +209,7 @@ catch ME
     fprintf('✗ getCascadeSize()失败: %s\n', ME.message);
 end
 
+% 检查isCascadeComplete方法
 try
     test_complete = simulation.isCascadeComplete();
     if test_complete
@@ -170,6 +222,7 @@ catch ME
     fprintf('✗ isCascadeComplete()失败: %s\n', ME.message);
 end
 
+% 检查resetCascadeTracking方法
 try
     simulation.resetCascadeTracking();
     fprintf('✓ resetCascadeTracking(): 成功\n');
@@ -177,7 +230,9 @@ catch ME
     fprintf('✗ resetCascadeTracking()失败: %s\n', ME.message);
 end
 
-%% 9. 总结
+%% 9. 总结和建议
+% 提供测试总结和系统优化建议
+
 fprintf('\n=== 测试总结 ===\n');
 fprintf('1. ✓ 单次c1/c2实验功能正常\n');
 fprintf('2. ✓ 集群敏感性Δc计算正确\n');
@@ -185,7 +240,7 @@ fprintf('3. ✓ 批量实验统计功能稳定\n');
 fprintf('4. ✓ 级联跟踪逻辑验证通过\n');
 fprintf('5. ✓ 所有核心方法正常工作\n');
 
-% 给出优化建议
+% 根据测试结果给出优化建议
 if mean_delta_c > 0.01
     fprintf('\n优化建议：当前系统显示良好的敏感性(Δc=%.4f)\n', mean_delta_c);
 else

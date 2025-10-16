@@ -1,4 +1,28 @@
 classdef ParticleSimulation < handle
+% ParticleSimulation 粒子群运动仿真类
+%
+% 类描述:
+%   该类实现了一个基于自驱动粒子的集体运动仿真系统，支持粒子间的
+%   激活传播机制。粒子在二维空间中运动，能够根据邻居的运动状态
+%   被激活并跟随特定粒子运动。
+%
+% 主要功能:
+%   - 粒子位置和方向的动态更新
+%   - 基于半径或拓扑的邻居查找
+%   - 粒子激活/去激活状态管理
+%   - 运动显著性检测和激活传播
+%   - 系统阶参数计算
+%
+% 使用示例:
+%   params.N = 200;
+%   params.cj_threshold = 2.0;
+%   sim = ParticleSimulation(params);
+%   sim.runSimulation();
+%
+% 作者：系统生成
+% 日期：2025年
+% 版本：MATLAB 2025a兼容
+
     properties
         % 仿真参数
         N = 1000;            % 粒子数量
@@ -39,6 +63,23 @@ classdef ParticleSimulation < handle
 
     methods
         function obj = ParticleSimulation(params)
+        % ParticleSimulation 构造函数
+        %
+        % 功能描述:
+        %   初始化粒子仿真对象，设置仿真参数并创建粒子初始状态
+        %
+        % 输入参数:
+        %   params - 包含仿真参数的结构体，可包含以下字段:
+        %     N - 粒子数量
+        %     rho - 粒子密度
+        %     v0 - 粒子速度
+        %     cj_threshold - 激活阈值
+        %     useFixedField - 是否使用固定场地
+        %     等等...
+        %
+        % 输出结果:
+        %   obj - 初始化完成的粒子仿真对象
+        
             % 构造函数，初始化参数和粒子状态
             if nargin > 0
                 fields = fieldnames(params);
@@ -58,6 +99,17 @@ classdef ParticleSimulation < handle
         end
 
         function initializeParticles(obj)
+        % initializeParticles 初始化粒子位置和状态
+        %
+        % 功能描述:
+        %   设置粒子的初始位置、方向和激活状态，使用物理分散方法
+        %   避免粒子位置重叠，确保合理的初始分布
+        %
+        % 算法特点:
+        %   - 支持固定场地和全区域两种初始化模式
+        %   - 使用物理分散算法避免粒子重叠
+        %   - 预分配所有状态数组，提高性能
+
             % 初始化粒子的位置、方向和状态
             % 使用物理分散方法避免位置重叠
 
@@ -83,6 +135,28 @@ classdef ParticleSimulation < handle
         end
 
         function [final_positions, final_velocities] = generateDispersedPositions(obj, num_agents)
+        % generateDispersedPositions 生成不重叠的粒子位置和速度
+        %
+        % 功能描述:
+        %   使用物理分散算法生成不重叠的粒子初始位置，避免粒子
+        %   在初始状态时过于集中，影响仿真结果
+        %
+        % 算法原理:
+        %   基于Lennard-Jones势能模型，粒子间同时存在短程排斥力和
+        %   长程吸引力，通过向量化计算实现高效的分散过程
+        %
+        % 输入参数:
+        %   num_agents - 需要生成的粒子数量
+        %
+        % 输出结果:
+        %   final_positions - 最终位置矩阵 [2 x num_agents]
+        %   final_velocities - 最终速度矩阵 [2 x num_agents]
+        %
+        % 性能优化:
+        %   - 完全向量化实现，避免循环
+        %   - 预分配所有矩阵
+        %   - 使用MATLAB内置向量运算函数
+
             % 生成不重叠的个体位置和速度 (向量化优化版本)
             % 通过矩阵运算实现高效的物理分散算法
             %
@@ -154,6 +228,17 @@ classdef ParticleSimulation < handle
         end
 
         function init_zone_size = calculateInitZoneSize(obj)
+        % calculateInitZoneSize 计算初始化区域大小
+        %
+        % 功能描述:
+        %   根据粒子数量和场地大小计算合适的初始化区域，
+        %   确保粒子初始分布既不过于集中也不会超出边界
+        %
+        % 算法特点:
+        %   - 固定场地模式：基于粒子数量的平方根缩放
+        %   - 自由场地模式：使用总场地大小的30%
+        %   - 设置上限为场地大小的50%，避免超出边界
+
             % 计算初始化区域大小
             if ~obj.useFixedField
                 init_zone_size = obj.simulationAreaSize * 0.3;
@@ -170,6 +255,17 @@ classdef ParticleSimulation < handle
         end
 
         function [final_positions, final_velocities] = generateCornerDispersedPositions(obj, num_agents)
+        % generateCornerDispersedPositions 左下角区域粒子分散初始化
+        %
+        % 功能描述:
+        %   在场地左下角区域生成不重叠的粒子位置，用于固定场地模式
+        %   的初始化。使用物理分散算法确保粒子间有合理间距
+        %
+        % 算法特点:
+        %   - 在计算出的初始化区域内随机分布粒子
+        %   - 使用与generateDispersedPositions相同的物理分散算法
+        %   - 适应固定场地模式的特殊需求
+
             % 左下角初始化 + randPose物理分散
 
             % 计算初始化区域大小
@@ -230,6 +326,15 @@ classdef ParticleSimulation < handle
         end
 
         function neighbor_matrix = findNeighbors(obj)
+        % findNeighbors 查找粒子邻居
+        %
+        % 功能描述:
+        %   根据选择的邻居查找策略(基于半径或基于拓扑)，
+        %   找到每个粒子的邻居，返回邻接矩阵
+        %
+        % 输出结果:
+        %   neighbor_matrix - 布尔邻接矩阵 [N x N]，元素(i,j)为true表示j是i的邻居
+
             % 查找每个粒子的邻居，返回邻接矩阵 [N x N]
             if obj.use_topology
                 neighbor_matrix = obj.findTopologyNeighbors();
@@ -239,6 +344,20 @@ classdef ParticleSimulation < handle
         end
 
         function neighbor_matrix = findRadiusNeighbors(obj)
+        % findRadiusNeighbors 基于半径的邻居查找
+        %
+        % 功能描述:
+        %   查找每个粒子固定半径内的所有邻居，这是经典的
+        %   基于距离的邻居查找方法
+        %
+        % 算法特点:
+        %   - 使用向量化计算，避免循环
+        %   - 基于欧几里得距离计算
+        %   - 排除自身(距离为0的情况)
+        %
+        % 性能考虑:
+        %   时间复杂度为O(N^2)，适合中等规模的粒子系统
+
             % 基于半径的邻居查找（原始方法）
             % 使用向量化方法提高查找效率，使用标准欧几里得距离
             dx = abs(obj.positions(:,1) - obj.positions(:,1)');
@@ -248,6 +367,21 @@ classdef ParticleSimulation < handle
         end
 
         function neighbor_matrix = findTopologyNeighbors(obj)
+        % findTopologyNeighbors 基于拓扑的邻居查找
+        %
+        % 功能描述:
+        %   查找每个粒子的k个最近邻，不考虑实际距离，
+        %   只基于拓扑关系确定邻居
+        %
+        % 算法特点:
+        %   - 每个粒子有固定数量的邻居(k_neighbors)
+        %   - 使用距离排序找到最近的k个邻居
+        %   - 向量化实现提高效率
+        %
+        % 优势:
+        %   保证每个粒子有相同数量的邻居，避免稀疏区域
+        %   的粒子连接度过低的问题
+
             % 基于拓扑的邻居查找（k-nearest neighbors）
             % 返回邻接矩阵 [N x N]
             % 使用向量化方法提高效率
@@ -275,6 +409,24 @@ classdef ParticleSimulation < handle
         end
 
         function step(obj)
+        % step 执行一个时间步的粒子仿真
+        %
+        % 功能描述:
+        %   这是仿真核心函数，执行一个完整的时间步，包括邻居查找、
+        %   激活状态更新、角度和位置更新，以及统计量计算
+        %
+        % 算法流程:
+        %   1. 查找每个粒子的邻居
+        %   2. 更新激活状态和期望运动方向
+        %   3. 根据期望方向更新粒子角度
+        %   4. 根据角度更新粒子位置
+        %   5. 计算并存储统计量
+        %
+        % 激活机制:
+        %   - 未激活粒子检测邻居的运动显著性，超过阈值则被激活
+        %   - 已激活粒子跟踪源头粒子，角度差过大则取消激活
+        %   - 运动显著性通过邻居位置变化的角度速度计算
+
             % 执行一个时间步的仿真
             if obj.current_step >= obj.T_max
                 return;
@@ -390,6 +542,17 @@ classdef ParticleSimulation < handle
         end
 
         function runSimulation(obj)
+        % runSimulation 运行完整的仿真过程
+        %
+        % 功能描述:
+        %   执行从开始到结束的完整仿真过程，调用step()函数
+        %   直到达到最大时间步数
+        %
+        % 使用方法:
+        %   sim = ParticleSimulation(params);
+        %   sim.runSimulation();
+        %   results = sim.order_parameter;  % 获取阶参数历史
+
             % 运行完整的仿真过程
             for t_step = 1:obj.T_max
                 obj.step();

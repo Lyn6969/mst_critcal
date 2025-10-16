@@ -1,4 +1,27 @@
 classdef ParticleSimulationWithExternalPulse < ParticleSimulation
+% ParticleSimulationWithExternalPulse 带外源激活的粒子仿真类
+%
+% 类描述:
+%   该类继承自ParticleSimulation，增加了外源激活机制和级联统计功能。
+%   支持在特定时间点触发外源脉冲，强制指定数量的粒子改变方向，
+%   并跟踪由此引发的级联传播过程。
+%
+% 主要功能:
+%   - 外源脉冲触发机制
+%   - 级联传播过程跟踪
+%   - 集群敏感性(Δc)计算支持
+%   - 级联规模统计
+%   - 分支比分析
+%
+% 应用场景:
+%   - 研究外源刺激对集体行为的影响
+%   - 测量系统的敏感性和脆弱性
+%   - 分析级联传播的动力学特性
+%
+% 作者：系统生成
+% 日期：2025年
+% 版本：MATLAB 2025a兼容
+
     properties
         % 外源激活控制参数
         stabilization_steps = 100;           % 稳定运行步数
@@ -25,6 +48,18 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
 
     methods
         function obj = ParticleSimulationWithExternalPulse(params)
+        % ParticleSimulationWithExternalPulse 构造函数
+        %
+        % 功能描述:
+        %   初始化带外源激活功能的粒子仿真对象，调用父类构造函数
+        %   并初始化外源激活和级联跟踪相关的状态变量
+        %
+        % 输入参数:
+        %   params - 包含仿真参数的结构体，同ParticleSimulation
+        %
+        % 输出结果:
+        %   obj - 初始化完成的带外源激活功能的仿真对象
+
             % 调用父类构造函数
             obj@ParticleSimulation(params);
 
@@ -38,6 +73,16 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
         end
 
         function setLogging(obj, flag)
+        % setLogging 设置调试信息输出开关
+        %
+        % 功能描述:
+        %   控制是否输出详细的调试信息，包括外源激活过程、
+        %   级联传播事件等
+        %
+        % 输入参数:
+        %   flag - 布尔值，true表示启用调试输出，false表示关闭
+        %          默认值为true
+
             % 设置是否输出调试信息
             if nargin < 2
                 flag = true;
@@ -46,6 +91,24 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
         end
 
         function triggerExternalPulse(obj)
+        % triggerExternalPulse 触发外源激活脉冲
+        %
+        % 功能描述:
+        %   在稳定期结束后触发外源激活，随机选择指定数量的粒子，
+        %   强制它们转向90度，并开始级联跟踪
+        %
+        % 算法流程:
+        %   1. 检查是否已触发过外源脉冲(避免重复)
+        %   2. 初始化级联统计跟踪变量
+        %   3. 随机选择指定数量的粒子
+        %   4. 设置外源激活状态和目标角度
+        %   5. 开始强制转向过程
+        %
+        % 设计特点:
+        %   - 90度转向确保显著的运动变化
+        %   - 随机选择避免位置偏向性
+        %   - 完整的状态跟踪确保统计准确性
+
             % 触发外源脉冲，随机选择个体并设置90度转向目标
             if obj.external_pulse_triggered
                 return; % 已经触发过，避免重复触发
@@ -141,6 +204,19 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
         end
 
         function step(obj)
+        % step 执行带外源激活的仿真步骤
+        %
+        % 功能描述:
+        %   重写父类的step方法，集成外源激活机制和级联统计功能。
+        %   在指定时间点触发外源脉冲，并跟踪级联传播过程
+        %
+        % 算法流程:
+        %   1. 检查是否到了外源脉冲触发时间
+        %   2. 执行常规的邻居查找和状态更新
+        %   3. 处理外源激活粒子的特殊行为
+        %   4. 更新粒子角度和位置
+        %   5. 更新级联统计信息
+
             % 重写step方法，集成外源激活机制
             if obj.current_step >= obj.T_max
                 return;
@@ -292,16 +368,45 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
         end
 
         function cascade_size = getCascadeSize(obj)
+        % getCascadeSize 获取当前级联规模
+        %
+        % 功能描述:
+        %   计算并返回当前级联的规模，定义为被激活过的粒子
+        %   数量占总粒子数的比例
+        %
+        % 输出结果:
+        %   cascade_size - 级联规模，范围[0,1]，0表示无级联，1表示全激活
+
             % 返回当前级联规模（everActivated个体数/总个体数）
             cascade_size = sum(obj.everActivated) / obj.N;
         end
 
         function is_complete = isCascadeComplete(obj)
+        % isCascadeComplete 判断级联是否结束
+        %
+        % 功能描述:
+        %   检查级联传播过程是否已经结束，结束条件为连续
+        %   一定步数没有新的激活粒子出现
+        %
+        % 输出结果:
+        %   is_complete - 布尔值，true表示级联已结束，false表示仍在进行
+
             % 判断级联是否完全结束
             is_complete = ~obj.cascade_active;
         end
 
         function resetCascadeTracking(obj)
+        % resetCascadeTracking 重置级联跟踪状态
+        %
+        % 功能描述:
+        %   重置所有与级联统计相关的状态变量，准备进行下一次实验
+        %   包括激活历史、外源激活状态和计时器等
+        %
+        % 使用场景:
+        %   - 在运行新的实验前重置状态
+        %   - 批量实验中的状态清理
+        %   - 系统重新初始化
+
             % 重置级联统计跟踪变量，准备下次实验
             obj.everActivated = false(obj.N, 1);
             obj.cascade_active = false;
@@ -327,6 +432,25 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
         end
 
         function cascade_size = runSingleExperiment(obj, initial_count)
+        % runSingleExperiment 运行单次级联实验
+        %
+        % 功能描述:
+        %   执行完整的单次级联实验，包括稳定期、外源脉冲触发和
+        %   级联传播过程，用于计算c1或c2值
+        %
+        % 输入参数:
+        %   initial_count - 初发个体数量(1或2)，用于c1/c2实验
+        %
+        % 输出结果:
+        %   cascade_size - 最终级联规模(被激活粒子比例)
+        %
+        % 实验流程:
+        %   1. 重置系统状态和粒子位置
+        %   2. 运行稳定期(不计入统计)
+        %   3. 触发外源脉冲
+        %   4. 运行级联期直到结束
+        %   5. 返回级联规模
+
             % 运行单次级联实验，支持c1/c2计算
             % 输入：initial_count - 初发个体数量（1或2）
             % 输出：cascade_size - 最终级联规模（everActivated个体数/总个体数）
@@ -386,11 +510,27 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
         end
 
         function external_count = getExternallyActivatedCount(obj)
+        % getExternallyActivatedCount 获取当前外源激活粒子数
+        %
+        % 功能描述:
+        %   返回当前正处于外源激活状态的粒子数量
+        %
+        % 输出结果:
+        %   external_count - 外源激活粒子数量
+
             % 获取当前外源激活个体数量
             external_count = sum(obj.isExternallyActivated);
         end
 
         function external_indices = getExternallyActivatedIndices(obj)
+        % getExternallyActivatedIndices 获取外源激活粒子索引
+        %
+        % 功能描述:
+        %   返回当前正处于外源激活状态的粒子索引数组
+        %
+        % 输出结果:
+        %   external_indices - 外源激活粒子的索引数组
+
             % 获取外源激活个体的索引
             external_indices = find(obj.isExternallyActivated);
         end

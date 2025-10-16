@@ -1,18 +1,51 @@
-% Delta_c 参数扫描实验脚本
-% 扫描cj_threshold参数，计算集群敏感性delta_c
-% 作者：[Your Name]
-% 日期：2025-01-25
+% run_delta_c_parameter_scan Delta_c 参数扫描实验脚本
+%
+% 功能描述:
+%   该脚本实现了对运动显著性阈值(cj_threshold)的系统性扫描，
+%   计算每个阈值下的集群敏感性Δc，用于研究系统对外源刺激的响应特性
+%
+% 主要功能:
+%   - 参数空间扫描(cj_threshold)
+%   - c1/c2实验批量执行
+%   - 统计分析和误差估计
+%   - 结果可视化和保存
+%   - 实验进度跟踪
+%
+% 算法流程:
+%   1. 设置参数扫描范围
+%   2. 对每个参数点运行多次c1/c2实验
+%   3. 计算统计量(均值、标准差、标准误差)
+%   4. 生成可视化结果
+%   5. 保存完整实验数据
+%
+% 输出结果:
+%   - Δc随参数变化曲线
+%   - 统计不确定性分析
+%   - 原始实验数据
+%   - 可视化图表
+%
+% 性能优化:
+%   - 内存预分配
+%   - 进度跟踪和中间结果保存
+%   - 错误处理和恢复机制
+%
+% 作者：系统生成
+% 日期：2025年
+% 版本：MATLAB 2025a兼容
 
-clc;
-clear;
-close all;
+clc;        % 清除命令行窗口
+clear;      % 清除工作空间变量
+close all;  % 关闭所有图形窗口
 
 %% 1. 实验参数设置
+% 配置粒子仿真系统的固定参数和扫描参数
+
+% 显示实验标题
 fprintf('=================================================\n');
 fprintf('          Delta_c 参数扫描实验\n');
 fprintf('=================================================\n\n');
 
-% 固定参数
+% 固定粒子系统参数
 params.N = 200;                          % 粒子数量
 params.rho = 1;                          % 粒子密度
 params.v0 = 1;                           % 粒子速度
@@ -34,14 +67,14 @@ params.stabilization_steps = 200;        % 稳定期步数
 params.forced_turn_duration = 200;       % 强制转向后独立状态持续时间
 
 % 参数扫描设置
-cj_threshold_min = 0.1;
-cj_threshold_max = 8.0;
-cj_threshold_step = 0.1;
-cj_thresholds = cj_threshold_min:cj_threshold_step:cj_threshold_max;
-num_params = length(cj_thresholds);
+cj_threshold_min = 0.1;                 % 最小阈值
+cj_threshold_max = 8.0;                 % 最大阈值
+cj_threshold_step = 0.1;               % 扫描步长
+cj_thresholds = cj_threshold_min:cj_threshold_step:cj_threshold_max;  % 阈值序列
+num_params = length(cj_thresholds);      % 参数点数量
 
 % 实验重复次数
-num_runs = 50;
+num_runs = 50;                          % 每个参数点的重复次数
 
 % 计算总实验次数
 total_experiments = num_params * num_runs * 2;  % ×2因为c1和c2
@@ -53,13 +86,15 @@ fprintf('总实验次数: %d (预计耗时: %.1f-%.1f 小时)\n\n', ...
     total_experiments, total_experiments*2/3600, total_experiments*3/3600);
 
 %% 2. 数据预分配
+% 预分配所有数据存储数组，提高内存使用效率
+
 fprintf('初始化数据结构...\n');
 
 % 原始数据矩阵
-c1_raw = zeros(num_params, num_runs);       % c1原始数据
-c2_raw = zeros(num_params, num_runs);       % c2原始数据
+c1_raw = zeros(num_params, num_runs);       % c1原始数据 [参数点 × 重复次数]
+c2_raw = zeros(num_params, num_runs);       % c2原始数据 [参数点 × 重复次数]
 
-% 统计量
+% 统计量数组
 c1_mean = zeros(num_params, 1);             % c1平均值
 c2_mean = zeros(num_params, 1);             % c2平均值
 c1_std = zeros(num_params, 1);              % c1标准差
@@ -68,11 +103,13 @@ c1_sem = zeros(num_params, 1);              % c1标准误差
 c2_sem = zeros(num_params, 1);              % c2标准误差
 delta_c = zeros(num_params, 1);             % 集群敏感性
 
-% 实验记录
+% 实验记录和错误统计
 experiment_log = cell(num_params, 1);       % 实验日志
 error_count = zeros(num_params, 2);         % 错误计数 [c1_errors, c2_errors]
 
 %% 3. 创建数据保存文件夹
+% 确保数据目录存在，并生成带时间戳的文件名
+
 if ~exist('data', 'dir')
     mkdir('data');
     fprintf('创建data文件夹...\n');
@@ -86,6 +123,8 @@ temp_filename = sprintf('data/delta_c_scan_%s_temp.mat', timestamp);
 fprintf('输出文件: %s\n\n', output_filename);
 
 %% 4. 主实验循环
+% 遍历所有参数点，对每个点运行多次c1/c2实验，计算统计量
+
 fprintf('开始参数扫描实验...\n');
 fprintf('----------------------------------------\n');
 
@@ -238,6 +277,8 @@ if usejava('desktop') && ishandle(h_waitbar)
 end
 
 %% 5. 最终数据保存
+% 保存完整的实验数据和元数据，确保结果可重现和分析
+
 fprintf('\n----------------------------------------\n');
 fprintf('保存最终结果...\n');
 
@@ -246,36 +287,36 @@ total_experiment_time = toc(experiment_start_time);
 
 % 准备完整的结果结构
 results = struct();
-results.description = 'Delta_c parameter scan experiment';
-results.parameters = params;
-results.scan_variable = 'cj_threshold';
-results.cj_thresholds = cj_thresholds;
-results.num_runs = num_runs;
+results.description = 'Delta_c parameter scan experiment';  % 实验描述
+results.parameters = params;                                  % 仿真参数
+results.scan_variable = 'cj_threshold';                      % 扫描变量名
+results.cj_thresholds = cj_thresholds;                         % 扫描参数值
+results.num_runs = num_runs;                                    % 每个参数的重复次数
 
 % 原始数据
-results.c1_raw = c1_raw;
-results.c2_raw = c2_raw;
+results.c1_raw = c1_raw;                                        % c1原始数据
+results.c2_raw = c2_raw;                                        % c2原始数据
 
 % 统计量
-results.c1_mean = c1_mean;
-results.c2_mean = c2_mean;
-results.c1_std = c1_std;
-results.c2_std = c2_std;
-results.c1_sem = c1_sem;
-results.c2_sem = c2_sem;
-results.delta_c = delta_c;
+results.c1_mean = c1_mean;                                      % c1平均值
+results.c2_mean = c2_mean;                                      % c2平均值
+results.c1_std = c1_std;                                        % c1标准差
+results.c2_std = c2_std;                                        % c2标准差
+results.c1_sem = c1_sem;                                        % c1标准误差
+results.c2_sem = c2_sem;                                        % c2标准误差
+results.delta_c = delta_c;                                      % 集群敏感性
 
 % 实验元数据
-results.timestamp = timestamp;
-results.date = datetime('now');
-results.total_experiments = total_experiments;
-results.total_time_seconds = total_experiment_time;
-results.total_time_hours = total_experiment_time / 3600;
-results.error_count = error_count;
-results.experiment_log = experiment_log;
+results.timestamp = timestamp;                                  % 实验时间戳
+results.date = datetime('now');                                  % 实验日期时间
+results.total_experiments = total_experiments;                   % 总实验次数
+results.total_time_seconds = total_experiment_time;             % 总耗时(秒)
+results.total_time_hours = total_experiment_time / 3600;          % 总耗时(小时)
+results.error_count = error_count;                              % 每个参数的错误次数
+results.experiment_log = experiment_log;                         % 实验日志
 
 % MATLAB版本信息
-results.matlab_version = version;
+results.matlab_version = version;                               % MATLAB版本信息
 
 % 保存到文件
 save(output_filename, 'results', '-v7.3');

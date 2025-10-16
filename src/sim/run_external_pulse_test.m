@@ -1,24 +1,56 @@
-% 外源激活机制测试脚本
-clc;
-clear;
-close all;
+% run_external_pulse_test 外源激活机制测试脚本
+%
+% 功能描述:
+%   该脚本专门用于测试和演示外源激活机制，通过可视化界面
+%   展示外源脉冲如何触发级联传播过程
+%
+% 主要功能:
+%   - 外源脉冲触发机制演示
+%   - 级联传播过程可视化
+%   - 外源激活粒子状态跟踪
+%   - 系统响应分析
+%
+% 实验流程:
+%   1. 系统稳定期运行
+%   2. 触发外源脉冲(强制转向)
+%   3. 级联传播过程
+%   4. 系统恢复平衡
+%
+% 输出结果:
+%   - 粒子状态实时显示
+%   - 外源激活和常规激活对比
+%   - 阶参数和激活个体数变化
+%   - 外源激活效果分析
+%
+% 作者：系统生成
+% 日期：2025年
+% 版本：MATLAB 2025a兼容
+
+clc;        % 清除命令行窗口
+clear;      % 清除工作空间变量
+close all;  % 关闭所有图形窗口
 
 %% 1. 设置图形默认属性
-set(0, 'DefaultAxesFontSize', 11);
-set(0, 'DefaultAxesFontName', 'Arial');
-set(0, 'DefaultTextFontSize', 11);
-set(0, 'DefaultTextFontName', 'Arial');
-set(0, 'DefaultLineLineWidth', 1.5);
+% 统一设置图形界面的字体、线宽等属性，确保所有图形具有一致的外观
+
+set(0, 'DefaultAxesFontSize', 11);      % 设置坐标轴字体大小
+set(0, 'DefaultAxesFontName', 'Arial');  % 设置坐标轴字体类型
+set(0, 'DefaultTextFontSize', 11);       % 设置文本字体大小
+set(0, 'DefaultTextFontName', 'Arial');  % 设置文本字体类型
+set(0, 'DefaultLineLineWidth', 1.5);     % 设置线条默认宽度
 
 %% 2. 参数设置
+% 配置粒子仿真系统和外源激活的各项参数
+
+% 基本粒子参数
 params.N = 200;                     % 粒子数量（减少以便观察）
 params.rho = 1;                     % 粒子密度
 params.v0 = 1;                      % 粒子速度
 params.angleUpdateParameter = 10;   % 角度更新参数
-params.angleNoiseIntensity = 0;   % 角度噪声强度
+params.angleNoiseIntensity = 0;   % 角度噪声强度（关闭以便观察级联）
 params.T_max = 400;                 % 减少仿真时间以便观察外源激活
 params.dt = 0.1;                    % 时间步长
-params.cj_threshold = 0.5;           % 激活阈值
+params.cj_threshold = 0.5;           % 激活阈值（较低以便触发级联）
 params.radius = 5;                  % 邻居查找半径
 params.deac_threshold = 0.1745;     % 取消激活阈值
 
@@ -32,16 +64,22 @@ params.stabilization_steps = 200;    % 缩短稳定期以便观察
 params.external_pulse_count = 2;    % 激活2个个体
 params.forced_turn_duration = 300;   % 独立状态持续时间
 
-% 可视化开关
-enable_visualization = true;
+% 可视化控制
+enable_visualization = true;         % 是否启用实时可视化
 %% 3. 创建仿真对象
+% 使用预设参数创建带外源激活功能的粒子仿真对象
+
 simulation = ParticleSimulationWithExternalPulse(params);
 
+% 显示实验配置信息
 fprintf('=== 外源激活机制测试 ===\n');
 fprintf('粒子数量: %d\n', params.N);
 fprintf('稳定期: %d 步\n', params.stabilization_steps);
 fprintf('外源激活个体数: %d\n', params.external_pulse_count);
 fprintf('强制转向后独立时间: %d 步\n', params.forced_turn_duration);
+
+%% 4. 创建可视化界面
+% 如果启用可视化，则创建包含三个子图的图形界面：粒子运动显示、阶参数变化和激活个体数变化
 
 if enable_visualization
     % 创建主图形窗口
@@ -149,12 +187,16 @@ if enable_visualization
     hold off;
 end
 
-%% 4. 主循环进行仿真
+%% 5. 主仿真循环
+% 执行完整的仿真过程，包括稳定期、外源脉冲触发和级联传播
+
+% 开始计时
 tic;
 
-% 存储外源激活个体数
+% 预分配外源激活个体数存储数组
 external_counts = zeros(params.T_max, 1);
 
+% 主循环：遍历每个时间步
 for t_step = 1:params.T_max
     % 执行仿真步骤
     simulation.step();
@@ -172,6 +214,7 @@ for t_step = 1:params.T_max
             t_step, params.T_max, t_step/params.T_max*100, external_counts(t_step));
     end
 
+    % 更新可视化界面（每2步更新一次，提高性能）
     if enable_visualization && mod(t_step, 2) == 0
         % 获取当前状态
         positions = simulation.positions;
@@ -212,27 +255,34 @@ for t_step = 1:params.T_max
         set(activated_plot, 'XData', 1:t_step, 'YData', simulation.activated_counts(1:t_step));
         set(external_activated_plot, 'XData', 1:t_step, 'YData', external_counts(1:t_step));
 
+        % 刷新图形显示
         drawnow limitrate;
     end
 end
 
+% 计算总仿真时间
 simulation_time = toc;
 fprintf('\n=== 仿真完成 ===\n');
 fprintf('总用时: %.2f 秒\n', simulation_time);
 fprintf('最终激活个体数: %d\n', sum(simulation.isActive));
 fprintf('最终外源激活个体数: %d\n', simulation.getExternallyActivatedCount());
 
-%% 5. 结果分析
+%% 6. 结果分析
+% 分析外源激活的效果，比较脉冲前后的系统状态变化
+
 pulse_step = params.stabilization_steps + 1;
 if pulse_step <= params.T_max
+    % 计算脉冲前后的平均阶参数
     pre_pulse_order = mean(simulation.order_parameter(max(1, pulse_step-10):pulse_step-1));
     post_pulse_order = mean(simulation.order_parameter(pulse_step:min(params.T_max, pulse_step+20)));
 
+    % 显示分析结果
     fprintf('\n=== 结果分析 ===\n');
     fprintf('外源脉冲前阶参数: %.4f\n', pre_pulse_order);
     fprintf('外源脉冲后阶参数: %.4f\n', post_pulse_order);
     fprintf('阶参数变化: %.4f\n', post_pulse_order - pre_pulse_order);
 
+    % 判断外源激活效果
     if post_pulse_order > pre_pulse_order + 0.1
         fprintf('✓ 外源激活成功触发级联效应\n');
     else
