@@ -43,6 +43,7 @@ fprintf('----------------------------------------\n');
 fprintf('              数据分析\n');
 fprintf('----------------------------------------\n');
 
+
 % 基本统计
 fprintf('实验参数:\n');
 fprintf('  - N = %d (粒子数)\n', results.parameters.N);
@@ -180,6 +181,41 @@ print(sprintf('data/delta_c_analysis_main_%s.png', results.timestamp), ...
     '-dpng', '-r300');
 fprintf('主要结果图已保存\n');
 
+% 导出主图数据
+mainData = struct();
+mainData.subplot1 = struct();
+mainData.subplot1.title = '级联规模';
+mainData.subplot1.xlabel = '运动显著性阈值 c_j';
+mainData.subplot1.ylabel = '平均级联规模';
+mainData.subplot1.x = cj_thresholds;
+mainData.subplot1.c1_mean = c1_mean;
+mainData.subplot1.c2_mean = c2_mean;
+mainData.subplot1.c1_sem = c1_sem;
+mainData.subplot1.c2_sem = c2_sem;
+mainData.subplot1.c1_std = c1_std;
+mainData.subplot1.c2_std = c2_std;
+mainData.subplot1.legend = {'c_1 (单个初发)', 'c_2 (两个初发)'};
+
+mainData.subplot2 = struct();
+mainData.subplot2.title = '集群敏感性';
+mainData.subplot2.xlabel = '运动显著性阈值 c_j';
+mainData.subplot2.ylabel = '\Delta c = c_2 - c_1';
+mainData.subplot2.x = cj_thresholds;
+mainData.subplot2.delta_c = delta_c;
+mainData.subplot2.max_delta_c = max_delta_c;
+mainData.subplot2.optimal_cj = optimal_cj;
+
+mainData.subplot3 = struct();
+mainData.subplot3.title = '相对集群效应';
+mainData.subplot3.xlabel = '运动显著性阈值 c_j';
+mainData.subplot3.ylabel = '相对增强 \Delta c / c_1';
+mainData.subplot3.x = cj_thresholds;
+mainData.subplot3.relative_enhancement = relative_enhancement;
+mainData.subplot3.max_relative_enhancement = max_rel;
+
+% 调用数据导出函数
+exportFigureData(mainData, 'delta_c_analysis_main', 'Delta_c分析主要结果图');
+
 %% 4. 数据质量分析图
 fprintf('生成数据质量分析图...\n');
 
@@ -232,18 +268,40 @@ subplot(2, 3, 5);
 % 选择代表性参数点
 n_representative = 10;
 repr_indices = round(linspace(1, length(cj_thresholds), n_representative));
-boxplot_data = [];
-group_labels = [];
 
+% 预分配boxplot_data和group_labels以提高性能
+% 首先计算所需的总大小
+total_data_size = 0;
 for i = 1:length(repr_indices)
     idx = repr_indices(i);
     valid_c1 = c1_raw(idx, ~isnan(c1_raw(idx, :)));
     valid_c2 = c2_raw(idx, ~isnan(c2_raw(idx, :)));
+    total_data_size = total_data_size + length(valid_c1) + length(valid_c2);
+end
 
-    boxplot_data = [boxplot_data, valid_c1, valid_c2];
-    group_labels = [group_labels, ...
-        ones(1, length(valid_c1))*i, ...
-        ones(1, length(valid_c2))*(i+0.3)];
+% 预分配数组
+boxplot_data = zeros(1, total_data_size);
+group_labels = zeros(1, total_data_size);
+
+% 填充预分配的数组
+current_idx = 1;
+for i = 1:length(repr_indices)
+    idx = repr_indices(i);
+    valid_c1 = c1_raw(idx, ~isnan(c1_raw(idx, :)));
+    valid_c2 = c2_raw(idx, ~isnan(c2_raw(idx, :)));
+    
+    len_c1 = length(valid_c1);
+    len_c2 = length(valid_c2);
+    
+    % 填充boxplot_data
+    boxplot_data(current_idx:current_idx+len_c1-1) = valid_c1;
+    current_idx = current_idx + len_c1;
+    boxplot_data(current_idx:current_idx+len_c2-1) = valid_c2;
+    current_idx = current_idx + len_c2;
+    
+    % 填充group_labels
+    group_labels(current_idx-len_c1-len_c2:current_idx-len_c2-1) = ones(1, len_c1) * i;
+    group_labels(current_idx-len_c2:current_idx-1) = ones(1, len_c2) * (i + 0.3);
 end
 
 boxplot(boxplot_data, group_labels, 'Colors', 'br');
@@ -287,6 +345,62 @@ savefig(fig_quality, sprintf('data/delta_c_quality_%s.fig', results.timestamp));
 print(sprintf('data/delta_c_quality_%s.png', results.timestamp), ...
     '-dpng', '-r300');
 fprintf('数据质量分析图已保存\n');
+
+% 导出数据质量分析数据
+qualityData = struct();
+qualityData.subplot1 = struct();
+qualityData.subplot1.title = 'c_1 原始数据热图';
+qualityData.subplot1.xlabel = 'c_j threshold';
+qualityData.subplot1.ylabel = '实验运行编号';
+qualityData.subplot1.x = cj_thresholds;
+qualityData.subplot1.y = 1:results.num_runs;
+qualityData.subplot1.data = c1_raw';
+
+qualityData.subplot2 = struct();
+qualityData.subplot2.title = 'c_2 原始数据热图';
+qualityData.subplot2.xlabel = 'c_j threshold';
+qualityData.subplot2.ylabel = '实验运行编号';
+qualityData.subplot2.x = cj_thresholds;
+qualityData.subplot2.y = 1:results.num_runs;
+qualityData.subplot2.data = c2_raw';
+
+qualityData.subplot3 = struct();
+qualityData.subplot3.title = '\Delta c 原始数据热图';
+qualityData.subplot3.xlabel = 'c_j threshold';
+qualityData.subplot3.ylabel = '实验运行编号';
+qualityData.subplot3.x = cj_thresholds;
+qualityData.subplot3.y = 1:results.num_runs;
+qualityData.subplot3.data = delta_c_raw;
+
+qualityData.subplot4 = struct();
+qualityData.subplot4.title = '数据变异性分析';
+qualityData.subplot4.xlabel = 'c_j threshold';
+qualityData.subplot4.ylabel = '变异系数 (CV)';
+qualityData.subplot4.x = cj_thresholds;
+qualityData.subplot4.cv_c1 = cv_c1;
+qualityData.subplot4.cv_c2 = cv_c2;
+qualityData.subplot4.legend = {'CV(c_1)', 'CV(c_2)'};
+
+qualityData.subplot5 = struct();
+qualityData.subplot5.title = '数据分布箱线图';
+qualityData.subplot5.xlabel = 'c_j threshold';
+qualityData.subplot5.ylabel = '级联规模';
+qualityData.subplot5.representative_indices = repr_indices;
+qualityData.subplot5.representative_cj = cj_thresholds(repr_indices);
+qualityData.subplot5.boxplot_data = boxplot_data;
+qualityData.subplot5.group_labels = group_labels;
+
+qualityData.subplot6 = struct();
+qualityData.subplot6.title = '收敛性分析';
+qualityData.subplot6.xlabel = '实验运行次数';
+qualityData.subplot6.ylabel = '累积平均值';
+qualityData.subplot6.x = 1:results.num_runs;
+qualityData.subplot6.representative_param_idx = repr_param_idx;
+qualityData.subplot6.cumulative_mean_c1 = cumulative_mean_c1;
+qualityData.subplot6.cumulative_mean_c2 = cumulative_mean_c2;
+
+% 调用数据导出函数
+exportFigureData(qualityData, 'delta_c_quality', 'Delta_c数据质量分析图');
 
 %% 5. 相位图分析
 fprintf('生成相位图分析...\n');
@@ -343,6 +457,31 @@ print(sprintf('data/delta_c_phase_%s.png', results.timestamp), ...
     '-dpng', '-r300');
 fprintf('相位图分析已保存\n');
 
+% 导出相位图分析数据
+phaseData = struct();
+phaseData.subplot1 = struct();
+phaseData.subplot1.title = '级联规模相位图';
+phaseData.subplot1.xlabel = 'c_1 (单个初发)';
+phaseData.subplot1.ylabel = 'c_2 (两个初发)';
+phaseData.subplot1.c1_mean = c1_mean;
+phaseData.subplot1.c2_mean = c2_mean;
+phaseData.subplot1.cj_thresholds = cj_thresholds;
+phaseData.subplot1.max_idx = max_idx;
+phaseData.subplot1.optimal_cj = optimal_cj;
+phaseData.subplot1.max_delta_c = max_delta_c;
+
+phaseData.subplot2 = struct();
+phaseData.subplot2.title = '\Delta c 3D分布';
+phaseData.subplot2.xlabel = 'c_j threshold';
+phaseData.subplot2.ylabel = '实验运行';
+phaseData.subplot2.zlabel = '\Delta c';
+phaseData.subplot2.x = cj_thresholds;
+phaseData.subplot2.y = 1:results.num_runs;
+phaseData.subplot2.z = c2_raw' - c1_raw';
+
+% 调用数据导出函数
+exportFigureData(phaseData, 'delta_c_phase', 'Delta_c相位图分析');
+
 %% 6. 生成报告
 fprintf('\n----------------------------------------\n');
 fprintf('生成分析报告...\n');
@@ -354,7 +493,7 @@ fid = fopen(report_filename, 'w');
 fprintf(fid, '=================================================\n');
 fprintf(fid, '       Delta_c 参数扫描实验分析报告\n');
 fprintf(fid, '=================================================\n\n');
-fprintf(fid, '生成时间: %s\n\n', datestr(datetime('now')));
+fprintf(fid, '生成时间: %s\n\n', char(datetime("now", "Format", "yyyy-MM-dd HH:mm:ss")));
 
 fprintf(fid, '1. 实验参数\n');
 fprintf(fid, '----------------------------------------\n');
@@ -414,3 +553,42 @@ fprintf('  2. 数据质量图: delta_c_quality_%s.png\n', results.timestamp);
 fprintf('  3. 相位图: delta_c_phase_%s.png\n', results.timestamp);
 fprintf('  4. 分析报告: delta_c_report_%s.txt\n', results.timestamp);
 fprintf('\n');
+
+%% 数据导出辅助函数
+function exportFigureData(data, filename, description)
+    % 确保data目录存在
+    if ~exist('data', 'dir')
+        mkdir('data');
+    end
+    
+    % 创建完整的数据结构
+    exportData = struct();
+    exportData.metadata = struct();
+    exportData.metadata.description = description;
+    exportData.metadata.timestamp = results.timestamp;
+    exportData.metadata.creationTime = char(datetime("now", "Format", "yyyy-MM-dd HH:mm:ss"));
+    exportData.metadata.parameters = results.parameters;
+    exportData.metadata.experimentInfo = struct();
+    exportData.metadata.experimentInfo.numRuns = results.num_runs;
+    exportData.metadata.experimentInfo.totalExperiments = results.total_experiments;
+    exportData.metadata.experimentInfo.totalTimeHours = results.total_time_hours;
+    exportData.data = data;
+    
+    % 导出为JSON文件
+    jsonFilename = sprintf('data/%s_%s.json', filename, results.timestamp);
+    fid = fopen(jsonFilename, 'w', 'n', 'UTF-8');
+    if fid == -1
+        error('无法创建文件: %s', jsonFilename);
+    end
+    
+    try
+        % 使用MATLAB 2025a的jsonencode函数
+        jsonStr = jsonencode(exportData, 'PrettyPrint', true);
+        fwrite(fid, jsonStr, 'UTF-8');
+        fclose(fid);
+        fprintf('数据已导出至: %s\n', jsonFilename);
+    catch ME
+        fclose(fid);
+        error('JSON导出失败: %s', ME.message);
+    end
+end

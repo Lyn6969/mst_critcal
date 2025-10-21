@@ -32,6 +32,8 @@ function run_branching_ratio_scan_parallel()
 %   4. 统计分析各参数下的分支比分布
 
 %% 1. 实验设置
+clc
+clear
 fprintf('=================================================\n');
 fprintf('   Branching Ratio 参数扫描实验 (并行化版本)\n');
 fprintf('=================================================\n\n');
@@ -47,7 +49,7 @@ cj_thresholds = cj_threshold_min:cj_threshold_step:cj_threshold_max;  % 阈值�
 num_params = numel(cj_thresholds);                % 参数点总数
 
 % 设置实验重复次数和计数器
-num_runs = 100;                                   % 每个阈值重复次数 (统计可靠性)
+num_runs = 50;                                   % 每个阈值重复次数 (统计可靠性)
 completed_tasks = 0;                              % 全局已完成任务计数器
 
 % 计算总实验数量
@@ -160,6 +162,65 @@ results.matlab_version = version;                                     % MATLAB�
 % 该格式支持大于2GB的文件，并且具有良好的压缩率
 save(output_filename, 'results', '-v7.3');
 fprintf('结果已保存至: %s\n', output_filename);
+
+% 导出结果为JSON格式，便于大模型解析
+% JSON文件保存到与MAT文件相同的目录
+json_filename = fullfile(output_dir, 'data.json');
+try
+    % 创建JSON格式的结果结构体
+    json_results = struct();
+    json_results.experiment = struct();
+    json_results.experiment.description = results.description;
+    json_results.experiment.scan_variable = results.scan_variable;
+    json_results.experiment.scan_variable_units = 'dimensionless';
+    json_results.experiment.timestamp = results.timestamp;
+    json_results.experiment.date = char(results.date);
+    json_results.experiment.total_experiments = results.total_experiments;
+    json_results.experiment.total_time_seconds = results.total_time_seconds;
+    json_results.experiment.total_time_hours = results.total_time_hours;
+    json_results.experiment.parallel_workers = results.parallel_workers;
+    json_results.experiment.matlab_version = results.matlab_version;
+    
+    % 添加扫描参数
+    json_results.parameters = struct();
+    json_results.parameters.cj_thresholds = results.cj_thresholds;
+    json_results.parameters.num_runs = results.num_runs;
+    json_results.parameters.N = results.parameters.N;
+    json_results.parameters.rho = results.parameters.rho;
+    json_results.parameters.v0 = results.parameters.v0;
+    json_results.parameters.angleUpdateParameter = results.parameters.angleUpdateParameter;
+    json_results.parameters.angleNoiseIntensity = results.parameters.angleNoiseIntensity;
+    json_results.parameters.T_max = results.parameters.T_max;
+    json_results.parameters.dt = results.parameters.dt;
+    json_results.parameters.radius = results.parameters.radius;
+    json_results.parameters.deac_threshold = results.parameters.deac_threshold;
+    json_results.parameters.fieldSize = results.parameters.fieldSize;
+    json_results.parameters.initDirection = results.parameters.initDirection;
+    json_results.parameters.useFixedField = results.parameters.useFixedField;
+    json_results.parameters.stabilization_steps = results.parameters.stabilization_steps;
+    json_results.parameters.forced_turn_duration = results.parameters.forced_turn_duration;
+    
+    % 添加分支比数据
+    json_results.branching_ratio = struct();
+    json_results.branching_ratio.raw_data = results.b_raw;
+    json_results.branching_ratio.mean = results.b_mean;
+    json_results.branching_ratio.std = results.b_std;
+    json_results.branching_ratio.sem = results.b_sem;
+    json_results.branching_ratio.error_count = results.error_count;
+    
+    % 使用MATLAB 2025a的jsonencode函数导出JSON
+    options = struct('PrettyPrint', true);
+    json_str = jsonencode(json_results, options);
+    
+    % 写入JSON文件
+    fid = fopen(json_filename, 'w', 'n', 'UTF-8');
+    fprintf(fid, '%s', json_str);
+    fclose(fid);
+    
+    fprintf('JSON结果已保存至: %s\n', json_filename);
+catch ME
+    warning(ME.identifier, 'JSON导出失败: %s', ME.message);
+end
 
 % 清理临时文件
 % 临时文件用于在长时间实验中保存中间结果，防止意外中断导致数据丢失
@@ -287,8 +348,11 @@ function ratio = compute_branching_ratio(sim, pulse_count)
     sim.current_step = 0;
 
     % 初始化跟踪变量
-    parent_candidates = false(sim.N, 1);  % 标记可能的父代粒子
-    children_count = zeros(sim.N, 1);      % 统计每个粒子的子代数量
+    parent_flags = false(sim.N, 1);         % 标记父节点
+    children_count = zeros(sim.N, 1);       % 统计每个粒子的子节点数量
+    counting_enabled = false;               % 是否开始统计
+    tracking_deadline = sim.T_max;          % 统计截止步
+    track_steps_after_trigger = 100;        % 触发后最大统计步数
 
     % 稳定期：让系统达到平衡状态，不统计激活关系
     % 这个阶段的激活不纳入分支比计算，避免初始瞬态影响
@@ -297,24 +361,32 @@ function ratio = compute_branching_ratio(sim, pulse_count)
     end
 
     % 级联期：跟踪粒子激活关系，计算分支比
-    max_cascade_steps = 200;  % 最大级联步数，防止无限循环
-    for step = 1:max_cascade_steps
+    max_remaining_steps = max(1, sim.T_max - sim.current_step);
+    for step = 1:max_remaining_steps
         % 记录当前活跃粒子状态
         prev_active = sim.isActive;
         
         % 执行一步仿真
         sim.step();
 
+        % 捕捉外源脉冲触发时刻，开启统计窗口
+        if ~counting_enabled && sim.external_pulse_triggered
+            counting_enabled = true;
+            tracking_deadline = min(sim.T_max, sim.current_step + track_steps_after_trigger);
+        end
+
         % 识别新激活的粒子
         newly_active = sim.isActive & ~prev_active;
-        if any(newly_active)
+        if counting_enabled && sim.current_step <= tracking_deadline && any(newly_active)
             % 获取新激活粒子的索引
             activated_indices = find(newly_active);
             
             % 遍历每个新激活粒子，确定其父代
             for idx = activated_indices'
-                % 标记新激活粒子为潜在的父代
-                parent_candidates(idx) = true;
+                % 标记新激活粒子
+                if ~parent_flags(idx)
+                    parent_flags(idx) = true;
+                end
                 
                 % 获取激活来源信息
                 parent = sim.src_ids{idx};
@@ -329,26 +401,30 @@ function ratio = compute_branching_ratio(sim, pulse_count)
                         % 增加父代的子代计数
                         children_count(parent_idx) = children_count(parent_idx) + 1;
                         
-                        % 标记父代为确认的父代粒子
-                        parent_candidates(parent_idx) = true;
+                        % 标记父代粒子
+                        parent_flags(parent_idx) = true;
                     end
                 end
             end
         end
 
-        % 检查级联是否完成(没有新激活粒子)
-        if sim.isCascadeComplete()
+        % 达到统计窗口或级联结束则退出
+        if counting_enabled && (~sim.cascade_active || sim.current_step >= tracking_deadline)
             break;
         end
     end
 
     % 计算平均分支比
-    parents = find(parent_candidates);  % 找到所有父代粒子
-    if isempty(parents)
-        ratio = 0;  % 没有父代粒子，分支比为0
+    if ~counting_enabled
+        ratio = 0;
     else
-        % 平均分支比 = 总子代数 / 父代粒子数
-        ratio = sum(children_count(parents)) / numel(parents);
+        parents = find(parent_flags);  % 找到所有父代粒子
+        if isempty(parents)
+            ratio = 0;  % 没有父代粒子，分支比为0
+        else
+            % 平均分支比 = 总子代数 / 父代粒子数
+            ratio = sum(children_count(parents)) / numel(parents);
+        end
     end
 
     % 恢复原始脉冲计数

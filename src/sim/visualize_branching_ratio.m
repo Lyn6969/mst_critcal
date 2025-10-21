@@ -44,11 +44,11 @@ fprintf('=== 分支比可视化 ===\n');
 % 获取用户输入的运动显著性阈值，该阈值决定了粒子激活的难易程度
 cj_threshold = input('请输入运动显著性阈值 (默认 2.0): ');
 if isempty(cj_threshold)
-    cj_threshold = 2.0;  % 如果用户未输入，使用默认值
+    cj_threshold = 4.0;  % 如果用户未输入，使用默认值
 end
 
 % 粒子系统基本参数
-params.N = 200;                    % 粒子总数
+params.N = 200;                    % 粒子总数1
 params.rho = 1;                    % 粒子密度参数
 params.v0 = 1;                     % 粒子基础速度
 params.angleUpdateParameter = 10;  % 角度更新参数，影响粒子转向强度
@@ -67,7 +67,7 @@ params.useFixedField = true;       % 是否使用固定边界
 % 级联传播控制参数
 params.stabilization_steps = 150;  % 系统稳定期步数，在此期间不施加外源脉冲
 params.forced_turn_duration = 200; % 强制转向持续时间
-params.cascade_end_threshold = 5;  % 级联结束阈值（连续无激活步数）
+params.cascade_end_threshold = 10;  % 级联结束阈值（连续无激活步数）
 params.external_pulse_count = 1;   % 外源脉冲激活的粒子数量
 
 track_steps_after_trigger = 100;   % 外源触发后最多统计的时间步数
@@ -81,7 +81,6 @@ fprintf('  • 稳定期 = %d 步\n', params.stabilization_steps);
 %% 3. 创建仿真对象
 % 使用预设参数创建粒子仿真对象，该类实现了包含外源脉冲的粒子系统
 simulation = ParticleSimulationWithExternalPulse(params);
-
 %% 4. 创建可视化界面
 % 创建主图形窗口，包含多个子图用于显示不同类型的信息
 fig = figure('Name', sprintf('分支比可视化 (cj=%.2f)', params.cj_threshold), ...
@@ -204,19 +203,15 @@ for t_step = 1:params.T_max
     is_external = simulation.isExternallyActivated; % 外源激活状态
 
     % 检查是否开始统计分支比（外源脉冲触发后）
-    if ~counting_enabled
-        if simulation.external_pulse_triggered
-            counting_enabled = true;            % 开始统计
-            seed_flags = false(params.N, 1);    % 重置种子标记
-            seeds = simulation.getExternallyActivatedIndices(); % 获取外源激活粒子索引
-            if ~isempty(seeds)
-                seed_flags(unique(seeds)) = true; % 标记种子粒子
-            end
-            fprintf('t = %d: 外源脉冲触发，开始统计分支。\n', t_step);
-            tracking_deadline = min(params.T_max, t_step + track_steps_after_trigger);
-        else
-            continue;  % 外源脉冲未触发，跳过当前步骤
+    if ~counting_enabled && simulation.external_pulse_triggered
+        counting_enabled = true;            % 开始统计
+        seed_flags = false(params.N, 1);    % 重置种子标记
+        seeds = simulation.getExternallyActivatedIndices(); % 获取外源激活粒子索引
+        if ~isempty(seeds)
+            seed_flags(unique(seeds)) = true; % 标记种子粒子
         end
+        fprintf('t = %d: 外源脉冲触发，开始统计分支。\n', t_step);
+        tracking_deadline = min(params.T_max, t_step + track_steps_after_trigger);
     end
 
     % 检测新激活的粒子（当前激活但前一时刻未激活）
@@ -224,42 +219,52 @@ for t_step = 1:params.T_max
     new_parents = 0;   % 当前步骤新增的父节点数
     new_children = 0;  % 当前步骤新增的子节点数
 
-    % 处理新激活的粒子
-    if any(newly_active)
-        indices = find(newly_active);  % 获取新激活粒子的索引
-        for idx = indices'  % 遍历每个新激活的粒子
-            % 如果该粒子尚未被标记为父节点，则标记并计数
-            if ~parent_flags(idx)
-                parent_flags(idx) = true;
-                new_parents = new_parents + 1;
-            end
-            
-            % 获取激活源信息
-            src = simulation.src_ids{idx};
-            if ~isempty(src)
-                % 如果有激活源，说明是粒子间传播
-                parent_idx = round(src(1));
-                if parent_idx >= 1 && parent_idx <= params.N
-                    children_count(parent_idx) = children_count(parent_idx) + 1;
-                    new_children = new_children + 1;
-                    parent_flags(parent_idx) = true;
-                    event_str = sprintf('t=%d: %d → %d', t_step, parent_idx, idx);
+    % 仅在统计窗口内记录分支信息
+    if counting_enabled && t_step <= tracking_deadline
+        if any(newly_active)
+            indices = find(newly_active);  % 获取新激活粒子的索引
+            for idx = indices'  % 遍历每个新激活的粒子
+                % 如果该粒子尚未被标记为父节点，则标记并计数
+                if ~parent_flags(idx)
+                    parent_flags(idx) = true;
+                    new_parents = new_parents + 1;
+                end
+                
+                % 获取激活源信息
+                src = simulation.src_ids{idx};
+                if ~isempty(src)
+                    % 如果有激活源，说明是粒子间传播
+                    parent_idx = round(src(1));
+                    if parent_idx >= 1 && parent_idx <= params.N
+                        children_count(parent_idx) = children_count(parent_idx) + 1;
+                        new_children = new_children + 1;
+                        parent_flags(parent_idx) = true;
+                        event_str = sprintf('t=%d: %d → %d', t_step, parent_idx, idx);
+                    else
+                        % 激活源索引无效，视为外源激活
+                        event_str = sprintf('t=%d: 外源激活 → %d', t_step, idx);
+                    end
                 else
-                    % 激活源索引无效，视为外源激活
+                    % 无激活源，直接外源激活
                     event_str = sprintf('t=%d: 外源激活 → %d', t_step, idx);
                 end
-            else
-                % 无激活源，直接外源激活
-                event_str = sprintf('t=%d: 外源激活 → %d', t_step, idx);
+                % 更新分支事件记录（保持最新10条）
+                branching_events = [event_str; branching_events(1:end-1)];
             end
-            % 更新分支事件记录（保持最新10条）
-            branching_events = [event_str; branching_events(1:end-1)];
         end
+    else
+        % 未进入统计窗口时清空事件显示，避免显示过期信息
+        branching_events = [""; branching_events(1:end-1)];
     end
 
     % 计算当前分支比统计
-    parent_count = sum(parent_flags);  % 当前父节点总数
-    child_total = sum(children_count); % 当前子节点总数
+    if counting_enabled && t_step <= tracking_deadline
+        parent_count = sum(parent_flags);  % 当前父节点总数
+        child_total = sum(children_count); % 当前子节点总数
+    else
+        parent_count = 0;
+        child_total = 0;
+    end
     if parent_count == 0
         avg_b = 0;  % 避免除零错误
     else
@@ -358,7 +363,7 @@ for t_step = 1:params.T_max
 
     %% 10. 级联结束检测
     % 检查级联是否已经结束或达到预设统计窗口
-    if ~simulation.cascade_active || t_step >= tracking_deadline
+    if counting_enabled && (~simulation.cascade_active || t_step >= tracking_deadline)
         if t_step >= tracking_deadline && simulation.cascade_active
             fprintf('t = %d: 达到预设统计窗口，停止统计。\n', t_step);
         else
@@ -368,6 +373,68 @@ for t_step = 1:params.T_max
     end
 end
 
-%% 11. 仿真结束
+%% 11. 数据导出为CSV
+% 将重要的统计数据导出为CSV文件，便于后续分析
+fprintf('正在导出数据为CSV文件...\n');
+
+% 创建数据矩阵，包含所有历史记录
+data_matrix = [avg_b_history, parent_history, child_history, ...
+               new_parent_history, new_child_history];
+
+% 移除NaN值（未使用的步数）
+valid_steps = ~isnan(avg_b_history);
+valid_data = data_matrix(valid_steps, :);
+
+% 创建时间步向量
+time_steps = find(valid_steps);
+
+% 创建带有表头的完整数据矩阵
+csv_data = [time_steps, valid_data];
+
+% 定义CSV文件名，包含参数信息
+csv_filename = sprintf('branching_ratio_data_cj_%.2f_%s.csv', ...
+    params.cj_threshold, datetime("now", "Format", "yyyyMMdd_HHmmss"));
+
+% 定义列标题
+headers = {'TimeStep', 'AvgBranchingRatio', 'ParentCount', 'ChildCount', ...
+           'NewParentCount', 'NewChildCount'};
+
+% 使用writematrix导出数据（MATLAB 2025a推荐方法）
+try
+    writematrix(csv_data, csv_filename);
+    fprintf('数据已成功导出到: %s\n', csv_filename);
+    
+    % 也创建一个包含表头的版本，便于阅读
+    csv_filename_with_headers = sprintf('branching_ratio_data_cj_%.2f_%s_with_headers.csv', ...
+        params.cj_threshold, datetime("now", "Format", "yyyyMMdd_HHmmss"));
+    
+    % 创建表头行
+    header_line = strjoin(headers, ',');
+    
+    % 将数据转换为字符串矩阵
+    data_strings = num2str(csv_data, '%.6f');
+    
+    % 写入带表头的CSV文件
+    fid = fopen(csv_filename_with_headers, 'w');
+    fprintf(fid, '%s\n', header_line);
+    for i = 1:size(data_strings, 1)
+        fprintf(fid, '%s\n', strjoin(data_strings(i, :), ','));
+    end
+    fclose(fid);
+    
+    fprintf('带表头的数据已导出到: %s\n', csv_filename_with_headers);
+    
+catch ME
+    fprintf('CSV导出出错: %s\n', ME.message);
+    % 备用方案：使用writematrix
+    try
+        writematrix(csv_data, csv_filename);
+        fprintf('使用备用方法成功导出到: %s\n', csv_filename);
+    catch
+        fprintf('CSV导出失败，请检查文件权限。\n');
+    end
+end
+
+%% 12. 仿真结束
 % 输出最终统计结果
 fprintf('仿真结束。最终平均分支比 b = %.3f\n', final_b);
