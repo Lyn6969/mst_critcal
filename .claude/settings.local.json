@@ -10,7 +10,13 @@
       "mcp__sequential-thinking__sequentialthinking",
       "Bash(mkdir:*)",
       "Bash(cp:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(git mv:*)",
+      "Bash(mv:*)",
+      "Bash(for dir in core experiments analysis visualization)",
+      "Bash(do echo \"=== $dir ===\")",
+      "Bash(ls:*)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

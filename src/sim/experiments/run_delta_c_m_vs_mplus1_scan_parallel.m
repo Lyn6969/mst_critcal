@@ -1,6 +1,6 @@
 function run_delta_c_m_vs_mplus1_scan_parallel()
 %RUN_DELTA_C_M_VS_MPLUS1_SCAN_PARALLEL
-%   并行扫描运动显著性阈值，比较 c_m 与 c_{m+1} 的级联规模差异 (m = 1…10)。
+%   并行扫描运动显著性阈值,比较 c_m 与 c_{m+1} 的级联规模差异 (m = 1…10)。
 
 %% 1. 基本设定
 fprintf('=================================================\n');
@@ -52,15 +52,28 @@ fprintf('\n开始并行实验...\n');
 fprintf('----------------------------------------\n');
 
 shared_params = parallel.pool.Constant(params);
+shared_cj_thresholds = parallel.pool.Constant(cj_thresholds);
+
+% 优化: pulse_counts 是简单递增序列,无需广播整个数组
+% 只需传递起始值和终止值,在 parfor 内部重建
+pulse_start = pulse_counts(1);  % = 1
+pulse_end = pulse_counts(end);  % = max(m_values) + 1
 
 parfor param_idx = 1:num_params
-    local_c = NaN(num_runs, num_pulses);
+    % 获取广播变量
+    current_cj_thresholds = shared_cj_thresholds.Value;
     current_params = shared_params.Value;
-    current_params.cj_threshold = cj_thresholds(param_idx);
+    current_params.cj_threshold = current_cj_thresholds(param_idx);
+    
+    % 在 worker 内部重建 pulse_counts,避免广播数组
+    local_pulse_counts = pulse_start:pulse_end;
+    local_num_pulses = numel(local_pulse_counts);
+    
+    local_c = NaN(num_runs, local_num_pulses);
 
     for run_idx = 1:num_runs
-        for pulse_idx = 1:num_pulses
-            pulse = pulse_counts(pulse_idx);
+        for pulse_idx = 1:local_num_pulses
+            pulse = local_pulse_counts(pulse_idx);
             local_c(run_idx, pulse_idx) = run_single_experiment(current_params, pulse);
             send(progress_queue, 1);
         end
@@ -70,7 +83,7 @@ parfor param_idx = 1:num_params
 end
 
 total_elapsed_seconds = toc(experiment_start_time);
-fprintf('\n实验完成，用时 %.2f 分钟。\n', total_elapsed_seconds / 60);
+fprintf('\n实验完成,用时 %.2f 分钟。\n', total_elapsed_seconds / 60);
 
 %% 5. 统计
 [c_mean, c_std, c_sem] = compute_statistics_3d(c_raw);
@@ -137,7 +150,7 @@ quicklook_path = fullfile(output_dir, 'result');
 render_quicklook_figure(cj_thresholds, m_values, c_mean, c_sem, ...
     delta_c, delta_sem, error_count, num_runs, pool.NumWorkers, quicklook_path);
 
-fprintf('\n实验完成！\n');
+fprintf('\n实验完成!\n');
 
 %% --------------------- 嵌套函数 ---------------------
     function update_progress(increment)
@@ -223,7 +236,7 @@ function render_quicklook_figure(thresholds, m_values, c_mean, c_sem, ...
     bar(thresholds, error_count, 'stacked');
     xlabel('c_j threshold');
     ylabel('失败次数');
-    title(sprintf('失败统计 (每阈值，%d次 × %d脉冲)', num_runs, size(c_mean, 2)));
+    title(sprintf('失败统计 (每阈值,%d次 × %d脉冲)', num_runs, size(c_mean, 2)));
     grid on;
 
     sgtitle(sprintf('Delta_c (m vs m+1) 参数扫描 (N=%d, %d次重复, %d workers)', ...
@@ -290,7 +303,7 @@ function pool = configure_parallel_pool()
     pool = gcp('nocreate');
     if isempty(pool)
         cluster = parcluster('local');
-        max_workers = min(cluster.NumWorkers, 60);
+        max_workers = min(cluster.NumWorkers, 100);
         if max_workers < 1
             error('没有可用的并行工作线程。');
         end

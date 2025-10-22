@@ -150,7 +150,7 @@ fprintf('\n实验完成！\n');
         params_out.rho = 1;
         params_out.v0 = 1;
         params_out.angleUpdateParameter = 10;
-        params_out.angleNoiseIntensity = 0;
+        params_out.angleNoiseIntensity = 0.05;
         params_out.T_max = 400;
         params_out.dt = 0.1;
         params_out.radius = 5;
