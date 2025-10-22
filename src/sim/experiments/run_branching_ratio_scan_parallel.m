@@ -77,7 +77,7 @@ progress_step = max(1, floor(total_tasks / 100)); % 进度更新步长 (每1%更
 
 % 创建带时间戳的输出目录和文件
 timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));  % 生成唯一时间戳
-output_dir = ensure_data_directory(timestamp);     % 确保数据目录存在
+output_dir = ensure_data_directory(timestamp, params.N);     % 确保数据目录存在
 output_filename = fullfile(output_dir, 'data.mat'); % 最终结果文件路径
 temp_filename = fullfile(output_dir, 'temp.mat');  % 临时文件路径(用于中间结果保存)
 
@@ -517,7 +517,7 @@ function [mean_values, std_values, sem_values] = compute_statistics(raw_data)
     end
 end
 
-function output_dir = ensure_data_directory(timestamp)
+function output_dir = ensure_data_directory(timestamp, N)
 %ENSURE_DATA_DIRECTORY 创建实验数据目录（按时间戳组织）
 %
 % 功能描述:
@@ -526,20 +526,22 @@ function output_dir = ensure_data_directory(timestamp)
 %
 % 输入参数:
 %   timestamp - 时间戳字符串，格式为'yyyyMMdd_HHmmss'
+%   N - 个体数目，用于标识实验规模
 %
 % 输出结果:
 %   output_dir - 完整的目录路径
 %
 % 目录结构:
-%   ./data/experiments/branching_ratio_scan/timestamp/
+%   ./data/experiments/branching_ratio_scan/N{N}_{timestamp}/
 %
 % 设计理念:
 %   - 层次化组织便于管理和查找
 %   - 时间戳确保唯一性
+%   - 个体数目标识实验规模
 %   - 与其他实验类型保持一致的命名约定
 
-    % 构建完整目录路径
-    output_dir = fullfile(pwd, 'data', 'experiments', 'branching_ratio_scan', timestamp);
+    % 构建完整目录路径，添加个体数目标记
+    output_dir = fullfile(pwd, 'data', 'experiments', 'branching_ratio_scan', sprintf('N%d_%s', N, timestamp));
     
     % 检查目录是否存在，不存在则创建
     if ~isfolder(output_dir)
