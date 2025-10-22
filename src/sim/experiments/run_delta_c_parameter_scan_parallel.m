@@ -42,7 +42,7 @@ progress_step = max(1, floor(total_tasks / 100));  % 至少 1% 更新一次
 
 % 生成输出路径及临时文件名，以便崩溃时恢复
 timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
-output_dir = ensure_data_directory(timestamp);
+output_dir = ensure_data_directory(timestamp, params.N);
 output_filename = fullfile(output_dir, 'data.mat');
 temp_filename = fullfile(output_dir, 'temp.mat');
 
@@ -229,9 +229,9 @@ function result = run_single_experiment(params, exp_type)
     end
 end
 
-function output_dir = ensure_data_directory(timestamp)
+function output_dir = ensure_data_directory(timestamp, N)
 %ENSURE_DATA_DIRECTORY 创建实验数据目录（按时间戳组织）。
-    output_dir = fullfile(pwd, 'data', 'experiments', 'delta_c_scan', timestamp);
+    output_dir = fullfile(pwd, 'data', 'experiments', 'delta_c_scan', sprintf('N%d_%s', N, timestamp));
     if ~isfolder(output_dir)
         mkdir(output_dir);
     end

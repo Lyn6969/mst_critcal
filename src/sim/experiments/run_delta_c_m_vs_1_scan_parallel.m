@@ -109,6 +109,8 @@ results.total_experiments = total_tasks;
 results.total_time_seconds = total_elapsed_seconds;
 results.total_time_hours = total_elapsed_seconds / 3600;
 results.error_count = error_count;
+results.success_rate_matrix = success_rate_matrix;
+results.success_rate_per_pulse = success_rate_per_pulse;
 results.parallel_workers = pool.NumWorkers;
 results.matlab_version = version;
 
@@ -136,7 +138,7 @@ fprintf('Δc 峰值: %.4f (cj_threshold = %.2f, m = %d)\n', ...
 
 quicklook_path = fullfile(output_dir, 'result');
 render_quicklook_figure(cj_thresholds, pulse_counts, c_mean, c_sem, ...
-    delta_c, delta_sem, error_count, num_runs, pool.NumWorkers, quicklook_path);
+    delta_c, delta_sem, error_count, success_rate_matrix, num_runs, pool.NumWorkers, quicklook_path);
 
 fprintf('\n实验完成！\n');
 
@@ -185,7 +187,29 @@ function result = run_single_experiment(params, pulse_count)
 end
 
 function render_quicklook_figure(thresholds, pulse_counts, c_mean, c_sem, ...
-    delta_c, delta_sem, error_count, num_runs, num_workers, output_prefix)
+    delta_c, delta_sem, error_count, success_rate_matrix, num_runs, num_workers, output_prefix)
+%RENDER_QUICKLOOK_FIGURE 生成Delta_c (1 vs m)扫描的三联图预览
+%
+% 功能描述:
+%   创建包含三个子图的综合可视化图表，直观展示Delta_c扫描结果
+%   子图1: 级联规模 vs 阈值，子图2: 集群敏感性，子图3: 失败统计
+%
+% 输入参数:
+%   thresholds - 运动显著性阈值数组 (x轴数据)
+%   pulse_counts - 脉冲数量数组 (不同初发个体数)
+%   c_mean - 平均级联规模矩阵 (参数点×脉冲数)
+%   c_sem - 标准误差矩阵 (参数点×脉冲数)
+%   delta_c - Delta_c矩阵 (参数点×脉冲数-1)
+%   delta_sem - Delta_c标准误差矩阵 (参数点×脉冲数-1)
+%   error_count - 失败次数矩阵 (参数点×脉冲数)
+%   success_rate_matrix - 成功率矩阵 (参数点×脉冲数)
+%   num_runs - 重复次数 (用于图标题)
+%   num_workers - 并行worker数 (用于图标题)
+%   output_prefix - 输出文件前缀路径
+%
+% 输出文件:
+%   - [output_prefix].fig: MATLAB可编辑图形格式
+%   - [output_prefix].png: 高分辨率PNG图像(300dpi)
 
     fig = figure('Name', 'Delta_c (1 vs m) 扫描结果', ...
         'Position', [100, 100, 1350, 450]);

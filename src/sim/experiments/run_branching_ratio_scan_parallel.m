@@ -33,7 +33,7 @@ function run_branching_ratio_scan_parallel()
 
 %% 1. 实验设置
 clc
-clear
+
 fprintf('=================================================\n');
 fprintf('   Branching Ratio 参数扫描实验 (并行化版本)\n');
 fprintf('=================================================\n\n');
