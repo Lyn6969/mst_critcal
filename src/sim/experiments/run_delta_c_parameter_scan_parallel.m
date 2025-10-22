@@ -246,7 +246,7 @@ function pool = configure_parallel_pool()
     pool = gcp('nocreate');
     if isempty(pool)
         cluster = parcluster('local');
-        max_workers = min(cluster.NumWorkers, 40);
+        max_workers = min(cluster.NumWorkers, 100);
         if max_workers < 1
             error('No available workers for parallel pool.');
         end
