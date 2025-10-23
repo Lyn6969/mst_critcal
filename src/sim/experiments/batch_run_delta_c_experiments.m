@@ -86,12 +86,6 @@ for i = 1:num_experiments
 end
 fprintf('预计总任务数: %d 次仿真\n\n', total_tasks);
 
-%% ===================== 用户确认 =====================
-user_input = input('是否开始执行所有实验? (输入 y 继续，其他键取消): ', 's');
-if ~strcmpi(user_input, 'y')
-    fprintf('\n实验已取消。\n');
-    return;
-end
 
 %% ===================== 执行批量实验 =====================
 fprintf('\n');
