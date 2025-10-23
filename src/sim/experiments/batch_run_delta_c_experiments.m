@@ -77,15 +77,6 @@ for i = 1:num_experiments
 end
 fprintf('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n');
 
-% 估算总任务量
-total_tasks = 0;
-for i = 1:num_experiments
-    num_params = 79;  % cj_threshold从0.1到8.0，步长0.1
-    num_runs = experiment_configs(i, 1);
-    total_tasks = total_tasks + num_params * num_runs * 2;  % c1和c2各一次
-end
-fprintf('预计总任务数: %d 次仿真\n\n', total_tasks);
-
 
 %% ===================== 执行批量实验 =====================
 fprintf('\n');

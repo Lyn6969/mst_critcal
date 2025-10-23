@@ -36,20 +36,6 @@ if nargin < 4
     error('需要4个输入参数: num_runs, N, noise_intensity, num_workers');
 end
 
-% 参数合理性检查
-if num_runs < 1 || num_runs > 1000
-    error('num_runs 应在 [1, 1000] 范围内');
-end
-if N < 10 || N > 10000
-    error('N 应在 [10, 10000] 范围内');
-end
-if noise_intensity < 0 || noise_intensity > 10
-    error('noise_intensity 应在 [0, 10] 范围内');
-end
-if num_workers < 1 || num_workers > 100
-    error('num_workers 应在 [1, 100] 范围内');
-end
-
 %% 1. 实验设置与参数范围
 fprintf('=================================================\n');
 fprintf('     Delta_c 参数扫描实验 (参数化版本)\n');
@@ -62,7 +48,7 @@ params.angleNoiseIntensity = noise_intensity;
 
 % 扫描范围（保持与原版一致）
 cj_threshold_min = 0.1;
-cj_threshold_max = 8.0;
+cj_threshold_max = 6.0;
 cj_threshold_step = 0.1;
 cj_thresholds = cj_threshold_min:cj_threshold_step:cj_threshold_max;
 num_params = numel(cj_thresholds);
@@ -204,7 +190,7 @@ fprintf('=================================================\n\n');
         params_out.rho = 1;
         params_out.v0 = 1;
         params_out.angleUpdateParameter = 10;
-        params_out.angleNoiseIntensity = 0.05;
+        params_out.angleNoiseIntensity = 0.0;
         params_out.T_max = 400;
         params_out.dt = 0.1;
         params_out.radius = 5;
