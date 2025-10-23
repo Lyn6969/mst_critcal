@@ -11,8 +11,8 @@ fprintf('=================================================\n\n');
 
 params = default_simulation_parameters();
 
-cj_threshold_min = 0.1;
-cj_threshold_max = 8.0;
+cj_threshold_min = 0;
+cj_threshold_max = 6.0;
 cj_threshold_step = 0.1;
 cj_thresholds = cj_threshold_min:cj_threshold_step:cj_threshold_max;
 num_params = numel(cj_thresholds);
