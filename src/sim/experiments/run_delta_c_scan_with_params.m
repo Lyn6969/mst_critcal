@@ -49,7 +49,7 @@ params.angleNoiseIntensity = noise_intensity;
 % 扫描范围（保持与原版一致）
 cj_threshold_min = 0;
 cj_threshold_max = 6.0;
-cj_threshold_step = 0.1;
+cj_threshold_step = 0.05;
 cj_thresholds = cj_threshold_min:cj_threshold_step:cj_threshold_max;
 num_params = numel(cj_thresholds);
 
