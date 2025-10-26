@@ -171,6 +171,9 @@ parent_history = NaN(params.T_max, 1);     % 父节点数量历史记录
 child_history = NaN(params.T_max, 1);      % 子节点数量历史记录
 new_parent_history = zeros(params.T_max, 1); % 新增父节点历史记录
 new_child_history = zeros(params.T_max, 1); % 新增子节点历史记录
+time_vec = (0:params.T_max)' * params.dt;   % 时间向量
+global_heading_series = NaN(params.T_max + 1, 1); % 全局平均方向序列
+global_heading_series(1) = compute_global_heading(simulation.theta, params.v0);
 
 % 初始化粒子状态跟踪数组
 parent_flags = false(params.N, 1);         % 标记粒子是否为父节点
@@ -201,6 +204,7 @@ for t_step = 1:params.T_max
     is_active = simulation.isActive;            % 当前激活状态
     ever_activated = simulation.everActivated;  % 历史激活状态
     is_external = simulation.isExternallyActivated; % 外源激活状态
+    global_heading_series(t_step + 1) = compute_global_heading(theta, params.v0);
 
     % 检查是否开始统计分支比（外源脉冲触发后）
     if ~counting_enabled && simulation.external_pulse_triggered
@@ -373,7 +377,67 @@ for t_step = 1:params.T_max
     end
 end
 
-%% 11. 数据导出为CSV
+final_step = min(t_step, params.T_max);
+
+%% 11. 基于高阶拓扑逻辑的持久性估计
+heading_segment = global_heading_series(1:final_step + 1);
+unwrapped_heading = unwrap(heading_segment);
+heading_diff = unwrapped_heading - unwrapped_heading(1);
+msd_heading = heading_diff .^ 2;
+burn_in_index = max(2, min(final_step + 1, params.stabilization_steps + 1));
+fit_time = time_vec(burn_in_index:final_step + 1);
+fit_msd = msd_heading(burn_in_index:final_step + 1);
+
+fit_curve = NaN(size(fit_time));
+if numel(fit_time) >= 2 && any(abs(diff(fit_msd)) > eps)
+    t_shift = fit_time - fit_time(1);
+    msd_shift = fit_msd - fit_msd(1);
+    smooth_window = max(5, floor(numel(msd_shift) * 0.1));
+    if smooth_window > 1
+        msd_shift = smoothdata(msd_shift, 'movmean', smooth_window);
+    end
+    slope = lsqnonneg(t_shift(:), msd_shift(:));
+    fit_curve = slope * t_shift + fit_msd(1);
+    if slope > 0
+        D_A = slope;
+        if slope <= 1e-6
+            persistence_P = Inf;
+        else
+            persistence_P = 1 / sqrt(D_A);
+        end
+    else
+        D_A = 0;
+        persistence_P = Inf;
+    end
+else
+    D_A = NaN;
+    persistence_P = NaN;
+end
+
+if ~isnan(persistence_P)
+    if isinf(persistence_P)
+        fprintf('基于高阶拓扑逻辑的持久性 P → ∞ (D_A ≈ 0)\n');
+    else
+        fprintf('基于高阶拓扑逻辑的持久性 P = %.4f (D_A = %.4e)\n', persistence_P, D_A);
+    end
+else
+    fprintf('持久性估计失败：有效拟合样本不足。\n');
+end
+
+persistence_results = struct();
+persistence_results.description = 'High-order inspired persistence metrics for branching visualization';
+persistence_results.time = time_vec(1:final_step + 1);
+persistence_results.global_heading = heading_segment;
+persistence_results.msd = msd_heading(1:final_step + 1);
+persistence_results.fit_time = fit_time;
+persistence_results.fit_msd = fit_msd;
+persistence_results.fit_curve = fit_curve;
+persistence_results.burn_in_index = burn_in_index;
+persistence_results.D_A = D_A;
+persistence_results.P = persistence_P;
+assignin('base', 'branching_persistence_results', persistence_results);
+
+%% 12. 数据导出为CSV
 % 将重要的统计数据导出为CSV文件，便于后续分析
 fprintf('正在导出数据为CSV文件...\n');
 
@@ -435,6 +499,23 @@ catch ME
     end
 end
 
-%% 12. 仿真结束
+%% 13. 仿真结束
 % 输出最终统计结果
 fprintf('仿真结束。最终平均分支比 b = %.3f\n', final_b);
+if ~isnan(persistence_P)
+    if isinf(persistence_P)
+        fprintf('最终持久性指标 P → ∞，扩散系数 D_A ≈ 0\n');
+    else
+        fprintf('最终持久性指标 P = %.4f，扩散系数 D_A = %.4e\n', persistence_P, D_A);
+    end
+end
+
+%% ========================================================================
+%% 辅助函数
+%% ========================================================================
+function heading = compute_global_heading(theta, v0)
+% compute_global_heading 计算全局平均速度方向
+    vx = v0 * cos(theta);
+    vy = v0 * sin(theta);
+    heading = atan2(mean(vy), mean(vx));
+end

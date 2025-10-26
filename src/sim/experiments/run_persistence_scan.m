@@ -3,14 +3,14 @@
 % 功能概述:
 %   1. 遍历运动显著性阈值 (cj_threshold) 与角度噪声强度 (angleNoiseIntensity)
 %   2. 基于 ParticleSimulation 模型执行多次仿真
-%   3. 计算每组参数下平均方向角的扩散系数 D_\phi 以及持久性指标 P = 1/sqrt(D_\phi)
+%   3. 计算每组参数下相对质心的空间扩散系数 D_r 以及持久性指标 P = 1/sqrt(D_r)
 %   4. 汇总统计结果并写入 data/experiments/persistence_scan/<时间戳>/ 目录
 %
 % 持久性扫描实验的目的：
 %   - 研究粒子群在不同参数条件下的运动持久性特征
-%   - 分析运动显著性阈值和角度噪声对群体方向一致性的影响
-%   - 通过角度扩散系数 D_\phi 量化群体方向变化的速率 (tradeoff.md)
-%   - 通过持久性指标 P = 1/sqrt(D_\phi) 评估群体保持方向的能力
+%   - 分析运动显著性阈值和角度噪声对群体空间凝聚力的影响
+%   - 通过相对质心扩散系数 D_r 量化群体相对分散速率
+%   - 通过持久性指标 P = 1/sqrt(D_r) 评估群体保持结构的能力
 %
 % 使用说明:
 %   直接运行本脚本。可根据需要调整下方的参数设置与扫描范围。
@@ -215,7 +215,7 @@ set(gca, 'YDir', 'normal');                    % 设置Y轴正向显示
 colorbar;                                      % 显示颜色条
 xlabel('cj\_threshold');                       % X轴标签
 ylabel('角度噪声强度');                        % Y轴标签
-title('平均角度扩散系数 D_\phi (越小越好)');       % 图标题
+title('平均相对质心扩散系数 D_r (越小越好)');       % 图标题
 
 % 保存图形文件，支持高分辨率PNG和可编辑FIG格式
 heatmap_path = fullfile(fig_dir, 'persistence_heatmap.png');
@@ -230,7 +230,7 @@ fprintf('\n所有任务完成。\n');
 %% ========================================================================
 
 function [D_runs, P_runs] = evaluate_single_setting(base_params, cj_value, noise_value, config, base_seed)
-% evaluate_single_setting 对单一参数组合执行多次仿真，计算角度扩散系数 D_\phi 与持久性指标 P
+% evaluate_single_setting 对单一参数组合执行多次仿真，计算相对质心扩散系数 D_r 与持久性指标 P
 %
 % 输入参数:
 %   base_params - 基础仿真参数结构体
@@ -240,7 +240,7 @@ function [D_runs, P_runs] = evaluate_single_setting(base_params, cj_value, noise
 %   base_seed   - 基础随机种子
 %
 % 输出参数:
-%   D_runs - 多次仿真的角度扩散系数结果数组
+%   D_runs - 多次仿真的相对质心扩散系数结果数组
 %   P_runs - 多次仿真的持久性指标结果数组
 
     num_runs = config.num_runs_per_setting;      % 获取重复次数
@@ -261,7 +261,7 @@ function [D_runs, P_runs] = evaluate_single_setting(base_params, cj_value, noise
 end
 
 function [D_value, P_value] = run_single_trial(base_params, cj_value, noise_value, config, seed)
-% run_single_trial 执行单次仿真并估算角度扩散系数及持久性指标
+% run_single_trial 执行单次仿真并估算相对质心扩散系数及持久性指标
 %
 % 输入参数:
 %   base_params - 基础仿真参数结构体
@@ -271,7 +271,7 @@ function [D_value, P_value] = run_single_trial(base_params, cj_value, noise_valu
 %   seed        - 随机种子(可选)
 %
 % 输出参数:
-%   D_value - 估算的角度扩散系数
+%   D_value - 估算的相对质心扩散系数
 %   P_value - 计算的持久性指标 P = 1/sqrt(D_value)
 
     % 设置随机种子以确保结果可重现
@@ -293,20 +293,25 @@ function [D_value, P_value] = run_single_trial(base_params, cj_value, noise_valu
     % 计算预热期结束索引，排除初始瞬态影响
     burn_in_index = max(2, floor((T + 1) * config.burn_in_ratio));
     
-    % 预分配平均方向时间序列数组 (tradeoff.md 定义：全局速度方向扩散)
-    avg_heading_series = zeros(T + 1, 1);
-    avg_heading_series(1) = global_heading(simulation.theta, simulation.v0);
+    % 预分配相对质心的均方位移时间序列
+    initial_positions = simulation.positions;
+    initial_centroid = mean(initial_positions, 1);
+    initial_offsets = initial_positions - initial_centroid;
+    msd = zeros(T + 1, 1);
+    msd(1) = 0;
+    centroid = initial_centroid;
     
-    % 执行仿真循环，记录每一步的平均方向
+    % 执行仿真循环，记录每一步的相对质心均方位移
     for step_idx = 1:T
         simulation.step();  % 执行一步仿真
-        avg_heading_series(step_idx + 1) = global_heading(simulation.theta, simulation.v0);
+        positions = simulation.positions;
+        centroid = mean(positions, 1);
+        centered_pos = positions - centroid;
+        rel_disp = centered_pos - initial_offsets;
+        squared_disp = sum(rel_disp.^2, 2);
+        msd(step_idx + 1) = mean(squared_disp, 'omitnan');
     end
     
-    % 解除相位跳变并计算平均方向角的均方位移 (⟨(Δφ)^2⟩ = D_φ t)
-    unwrapped_heading = unwrap(avg_heading_series);
-    heading_diff = unwrapped_heading - unwrapped_heading(1);
-    msd = heading_diff.^2;
     time_vec = (0:T)' * dt;                       % 时间向量
     
     % 提取用于线性拟合的数据段(排除预热期)
@@ -317,18 +322,26 @@ function [D_value, P_value] = run_single_trial(base_params, cj_value, noise_valu
     if numel(x) < 2 || all(abs(y - y(1)) < eps)
         D_value = eps;                            % 设置极小值避免数值问题
     else
-        % 线性拟合：MSD = D_φ * t，拟合斜率即为扩散系数
-        coeffs = polyfit(x, y, 1);                % 一阶多项式拟合
-        D_est = coeffs(1);                        % 提取斜率作为扩散系数估计
-        if D_est < eps
-            D_value = eps;                        % 确保扩散系数为正值
+        x_shift = x - x(1);
+        y_shift = y - y(1);
+        if any(x_shift > 0) && any(abs(y_shift) > eps)
+            smooth_window = max(5, floor(numel(y_shift) * 0.1));
+            if smooth_window > 1
+                y_shift = smoothdata(y_shift, 'movmean', smooth_window);
+            end
+            slope = lsqnonneg(x_shift(:), y_shift(:));
+            if slope <= eps
+                D_value = eps;
+            else
+                D_value = slope;
+            end
         else
-            D_value = D_est;
+            D_value = eps;
         end
     end
     
-    % 计算持久性指标：P = 1/sqrt(D_φ)
-    % 持久性指标越大，表示群体方向越稳定
+    % 计算持久性指标：P = 1/sqrt(D_r)
+    % 持久性指标越大，表示群体结构越稳定
     P_value = 1 / sqrt(D_value);
 end
 
@@ -386,17 +399,6 @@ function pool = configure_parallel_pool(desired_workers)
             pool = parpool(cluster, target);
         end
     end
-end
-
-function heading = global_heading(theta, v0)
-% global_heading 计算全体粒子的平均速度方向角
-%   theta - N×1 粒子朝向角
-%   v0    - 标量，粒子速度模长
-    vx = v0 * cos(theta);
-    vy = v0 * sin(theta);
-    mean_vx = mean(vx);
-    mean_vy = mean(vy);
-    heading = atan2(mean_vy, mean_vx);
 end
 
 function workers = select_worker_count(requested, max_workers)
