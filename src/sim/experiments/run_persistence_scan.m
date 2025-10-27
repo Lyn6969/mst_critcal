@@ -22,6 +22,7 @@
 clc;            % 清除命令行窗口内容
 clear;          % 清除工作空间变量
 close all;      % 关闭所有图形窗口
+addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 
 %% 1. 全局参数设置 ---------------------------------------------------------
 fprintf('=================================================\n');
@@ -55,7 +56,7 @@ base_params.useFixedField = true;          % 是否使用固定边界场域
 
 % 参数扫描范围设置 (可按需调整步长与范围)
 cj_thresholds = 0.0:0.1:6.0;               % 运动显著性阈值扫描范围：从0到6，步长0.1
-noise_levels = 0.0:0.05:1.0;               % 角度噪声强度扫描范围：从0到1，步长0.05
+noise_levels = 0.01:0.01:1.0;               % 角度噪声强度扫描范围：从0到1，步长0.01
 
 % 显示扫描参数信息
 fprintf('扫描的 cj_threshold 个数: %d\n', numel(cj_thresholds));
@@ -399,7 +400,7 @@ function pool = configure_parallel_pool(desired_workers)
 
     % 获取本地集群信息和最大可用工作进程数
     cluster = parcluster('local');
-    max_workers = min(cluster.NumWorkers, 60);  % 限制最大工作进程数避免系统过载
+    max_workers = min(cluster.NumWorkers, 180);  % 限制最大工作进程数，防止资源过载
     if max_workers < 1
         error('当前环境未检测到可用的并行 worker。');
     end
