@@ -34,6 +34,8 @@ config.num_runs_per_setting = 50;          % 每组参数的重复次数，增�
 config.enable_parallel = true;             % 默认开启并行计算 (主循环使用 parfor)，大幅提升计算效率
 config.desired_workers = [];               % 并行工作进程数量，为空则沿用现有并行池设置
 config.burn_in_ratio = 0.2;                % 拟合扩散系数时丢弃的前期比例，避免初始瞬态影响
+config.min_diffusion = 1e-3;               % 扩散系数的下限，防止数值异常
+config.min_fit_points = 30;                % 线性拟合所需的最少数据点数
 
 % 粒子仿真基础参数，可按项目需求调整
 base_params = struct();
@@ -81,11 +83,13 @@ num_cj = numel(cj_thresholds);              % cj_threshold 参数点数量
 num_noise = numel(noise_levels);            % 噪声水平参数点数量
 total_tasks = num_cj * num_noise;           % 总任务数(参数组合数)
 
+% 进度跟踪器初始化
+progress_update = create_progress_tracker(total_tasks);
+
 % 预分配结果存储数组，使用NaN初始化便于后续数据完整性检查
 % 注意：使用线性数组存储，便于并行计算，后续会重塑为矩阵形式
 D_mean_linear = NaN(total_tasks, 1);        % 扩散系数均值线性数组
 D_std_linear = NaN(total_tasks, 1);         % 扩散系数标准差线性数组
-P_mean_linear = NaN(total_tasks, 1);        % 持久性指标均值线性数组
 P_std_linear = NaN(total_tasks, 1);         % 持久性指标标准差线性数组
 raw_D_linear = cell(total_tasks, 1);        % 原始扩散系数数据元胞数组
 raw_P_linear = cell(total_tasks, 1);        % 原始持久性指标数据元胞数组
@@ -105,6 +109,9 @@ loop_timer = tic;                          % 启动计时器，记录总执行�
 
 % 根据配置选择并行或串行执行参数扫描
 if config.enable_parallel
+    progress_queue = parallel.pool.DataQueue;
+    afterEach(progress_queue, @(~) progress_update());
+    
     % 并行执行模式：使用parfor并行处理所有参数组合
     parfor task_idx = 1:total_tasks
         % 将线性任务索引转换为二维参数索引
@@ -121,20 +128,18 @@ if config.enable_parallel
         raw_P_linear{task_idx} = P_runs;       % 原始持久性指标数据
         D_mean_linear(task_idx) = mean(D_runs, 'omitnan');   % 扩散系数均值
         D_std_linear(task_idx) = std(D_runs, 0, 'omitnan');  % 扩散系数标准差
-        P_mean_linear(task_idx) = mean(P_runs, 'omitnan');   % 持久性指标均值
         P_std_linear(task_idx) = std(P_runs, 0, 'omitnan');  % 持久性指标标准差
+        
+        send(progress_queue, 1);
     end
 else
     % 串行执行模式：嵌套循环处理参数组合，提供进度显示
     current_task = 0;
     for cj_idx = 1:num_cj
         cj_value = cj_thresholds(cj_idx);
-        fprintf('>>> 开始处理 cj_threshold = %.2f\n', cj_value);
-        
         for noise_idx = 1:num_noise
             noise_value = noise_levels(noise_idx);
             current_task = current_task + 1;
-            fprintf('    - 噪声水平 %.2f (%d/%d)\n', noise_value, current_task, total_tasks);
             
             % 对当前参数组合执行多次仿真并计算统计量
             [D_runs, P_runs] = evaluate_single_setting( ...
@@ -145,11 +150,10 @@ else
             raw_P_linear{current_task} = P_runs;
             D_mean_linear(current_task) = mean(D_runs, 'omitnan');
             D_std_linear(current_task) = std(D_runs, 0, 'omitnan');
-            P_mean_linear(current_task) = mean(P_runs, 'omitnan');
             P_std_linear(current_task) = std(P_runs, 0, 'omitnan');
+            
+            progress_update();
         end
-        
-        fprintf('<<< 完成 cj_threshold = %.2f 的全部噪声扫描\n\n', cj_value);
     end
 end
 
@@ -167,7 +171,7 @@ end
 % 矩阵维度：行对应噪声水平，列对应运动显著性阈值
 D_mean = reshape(D_mean_linear, [num_noise, num_cj]);  % 扩散系数均值矩阵
 D_std = reshape(D_std_linear, [num_noise, num_cj]);    % 扩散系数标准差矩阵
-P_mean = reshape(P_mean_linear, [num_noise, num_cj]);  % 持久性指标均值矩阵
+P_mean = 1 ./ sqrt(D_mean);                            % 基于平均扩散计算的持久性矩阵
 P_std = reshape(P_std_linear, [num_noise, num_cj]);    % 持久性指标标准差矩阵
 raw_D = reshape(raw_D_linear, [num_noise, num_cj]);    % 原始扩散系数数据矩阵
 raw_P = reshape(raw_P_linear, [num_noise, num_cj]);    % 原始持久性指标数据矩阵
@@ -284,6 +288,20 @@ function [D_value, P_value] = run_single_trial(base_params, cj_value, noise_valu
     params.cj_threshold = cj_value;             % 设置运动显著性阈值
     params.angleNoiseIntensity = noise_value;   % 设置角度噪声强度
     
+    % 读取配置中的拟合与数值下限参数
+    if isfield(config, 'min_diffusion') && isnumeric(config.min_diffusion) ...
+            && isscalar(config.min_diffusion) && config.min_diffusion > 0
+        min_diffusion = config.min_diffusion;
+    else
+        min_diffusion = 1e-3;
+    end
+    if isfield(config, 'min_fit_points') && isnumeric(config.min_fit_points) ...
+            && isscalar(config.min_fit_points) && config.min_fit_points >= 2
+        min_fit_points = max(2, round(config.min_fit_points));
+    else
+        min_fit_points = 30;
+    end
+    
     % 创建粒子仿真对象
     simulation = ParticleSimulation(params);
     
@@ -319,8 +337,8 @@ function [D_value, P_value] = run_single_trial(base_params, cj_value, noise_valu
     y = msd(burn_in_index:end);                   % 均方位移数据
     
     % 异常情况处理：数据不足或变化过小
-    if numel(x) < 2 || all(abs(y - y(1)) < eps)
-        D_value = eps;                            % 设置极小值避免数值问题
+    if numel(x) < max(2, min_fit_points) || all(abs(y - y(1)) < eps)
+        D_value = NaN;
     else
         x_shift = x - x(1);
         y_shift = y - y(1);
@@ -330,19 +348,24 @@ function [D_value, P_value] = run_single_trial(base_params, cj_value, noise_valu
                 y_shift = smoothdata(y_shift, 'movmean', smooth_window);
             end
             slope = lsqnonneg(x_shift(:), y_shift(:));
-            if slope <= eps
-                D_value = eps;
+            if slope <= 0
+                D_value = NaN;
             else
                 D_value = slope;
             end
         else
-            D_value = eps;
+            D_value = NaN;
         end
     end
     
     % 计算持久性指标：P = 1/sqrt(D_r)
     % 持久性指标越大，表示群体结构越稳定
-    P_value = 1 / sqrt(D_value);
+    if isnan(D_value)
+        P_value = NaN;
+    else
+        D_value = max(D_value, min_diffusion);
+        P_value = 1 / sqrt(D_value);
+    end
 end
 
 function pool = configure_parallel_pool(desired_workers)
@@ -397,6 +420,51 @@ function pool = configure_parallel_pool(desired_workers)
             % 关闭当前并行池并创建新的
             delete(pool);
             pool = parpool(cluster, target);
+        end
+    end
+end
+
+function progress_handle = create_progress_tracker(total_tasks)
+% create_progress_tracker 返回一个函数句柄，每调用一次即更新整体进度。
+%
+% 输入:
+%   total_tasks - 需要完成的任务总数
+%
+% 输出:
+%   progress_handle - 无参函数句柄，执行时刷新进度显示
+
+    if total_tasks <= 0
+        progress_handle = @() [];
+        return;
+    end
+    
+    count = 0;
+    last_print = tic;
+    start_time = tic;
+    min_interval = 0.5;
+    
+    fprintf('进度: 0/%d (0.0%%)', total_tasks);
+    
+    progress_handle = @update_progress;
+    
+    function update_progress()
+        count = count + 1;
+        if toc(last_print) < min_interval && count < total_tasks
+            return;
+        end
+        pct = count / total_tasks * 100;
+        elapsed = toc(start_time);
+        if count > 0 && elapsed > 0
+            remaining = max(total_tasks - count, 0);
+            eta = (elapsed / count) * remaining;
+            eta_text = sprintf(' ETA %.1fs', eta);
+        else
+            eta_text = '';
+        end
+        fprintf('\r进度: %d/%d (%.1f%%)%s', count, total_tasks, pct, eta_text);
+        last_print = tic;
+        if count >= total_tasks
+            fprintf('\n');
         end
     end
 end
