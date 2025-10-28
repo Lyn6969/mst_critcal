@@ -166,7 +166,7 @@ errorbar(cj_thresholds, P_norm_mean, P_norm_sem, 's-', ...
     'LineWidth', 1.4, 'MarkerSize', 5, 'MarkerFaceColor', [0.3 0.6 0.9]);
 grid on;                                 % 显示网格：便于读取数值
 xlabel('运动显著性阈值 c_j');             % x轴标签：运动显著性阈值
-ylabel('归一化持久性 \hat{P}');          % y轴标签：归一化后的持久性指标
+ylabel('归一化持久性 P_{norm}');          % y轴标签：归一化后的持久性指标
 title(sprintf('归一化持久性 vs c_j (噪声=%.3f, 每点 %d 次)', ...
     base_params.angleNoiseIntensity, num_runs));  % 图形标题：包含实验参数信息
 
