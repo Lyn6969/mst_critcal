@@ -136,7 +136,7 @@ classdef ParticleSimulation < handle
                 [dispersed_positions, ~] = obj.generateDispersedPositions(obj.N);
                 obj.positions = dispersed_positions';
             obj.theta = rand(obj.N, 1) * 2 * pi;      % 随机分布方向
-        end
+            end
 
         obj.previousPositions = obj.positions;     % 上一时刻的位置
         obj.isActive = false(obj.N, 1);           % 初始化激活状态

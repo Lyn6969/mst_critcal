@@ -333,7 +333,11 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
             % 3. 更新角度
             delta_theta = desired_theta - obj.theta;
             weighted_sin = sin(delta_theta);
-            obj.theta = obj.theta + obj.angleUpdateParameter * weighted_sin * obj.dt + sqrt(2 * obj.angleNoiseIntensity * obj.dt) * randn(obj.N, 1);
+            noise = sqrt(2 * obj.angleNoiseIntensity * obj.dt) * randn(obj.N, 1);
+            if any(obj.isExternallyActivated)
+                noise(obj.isExternallyActivated) = 0;
+            end
+            obj.theta = obj.theta + obj.angleUpdateParameter * weighted_sin * obj.dt + noise;
             obj.theta = mod(obj.theta, 2 * pi);
 
             % 4. 更新位置

@@ -181,7 +181,7 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
                 trigger_failures(param_idx) = trigger_failures(param_idx) + 1;
             end
 
-            [P_value, D_value] = run_single_persistence_trial(pers_params, pers_cfg, seed_base + 10_000);
+            [P_value, D_value] = run_single_persistence_trial(pers_params, pers_cfg, seed_base + 10000);
             P_raw(param_idx, run_idx) = P_value;
             D_raw(param_idx, run_idx) = D_value;
         end
