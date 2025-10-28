@@ -7,7 +7,7 @@
 %
 % 使用方式：
 %   直接运行脚本。可根据需要调整噪声、粒子数、重复次数、
-%   以及自适应阈值策略参数（entropy 门限、cj_low/cj_high 等）。
+%   以及自适应阈值策略参数（序参量门限、cj_low/cj_high 等）。
 % =========================================================================
 
 clc;
@@ -51,13 +51,8 @@ pers_cfg.min_diffusion = 1e-4;
 adaptive_cfg = struct();
 adaptive_cfg.cj_low = 0.4;
 adaptive_cfg.cj_high = 2.5;
-adaptive_cfg.entropy_bins = 16;
-adaptive_cfg.entropy_threshold_low = 0.25;
-adaptive_cfg.entropy_threshold_high = 0.55;
-adaptive_cfg.min_neighbors = 4;
+adaptive_cfg.order_threshold = 0.6;
 adaptive_cfg.include_self = true;
-adaptive_cfg.smoothing_weight = 0.7;
-adaptive_cfg.fallback_entropy = 0.9;
 
 time_vec_resp = (0:resp_params.T_max)' * resp_params.dt;
 base_seed = 20250325;

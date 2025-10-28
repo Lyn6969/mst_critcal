@@ -3,7 +3,7 @@
 % 目的：
 %   - 在固定噪声场景下比较“固定运动显著性阈值”与“自适应阈值”两种机制，
 %     度量响应性 R 与持久性 P 的权衡关系。
-%   - 自适应机制采用局部航向熵来调节粒子的实时阈值，噪声越小阈值越低，
+%   - 自适应机制采用局部序参量来调节粒子的实时阈值，噪声越小阈值越低，
 %     噪声越大阈值越高，从而期待在兼顾持久性的同时提升响应性。
 %
 % 输出：
@@ -56,13 +56,8 @@ pers_cfg.min_fit_points = 40;
 adaptive_cfg = struct();
 adaptive_cfg.cj_low = 0.4;
 adaptive_cfg.cj_high = 2.5;
-adaptive_cfg.entropy_bins = 16;
-adaptive_cfg.entropy_threshold_low = 0.25;
-adaptive_cfg.entropy_threshold_high = 0.55;
-adaptive_cfg.min_neighbors = 4;
+adaptive_cfg.order_threshold = 0.6;
 adaptive_cfg.include_self = true;
-adaptive_cfg.smoothing_weight = 0.7;
-adaptive_cfg.fallback_entropy = 0.9;
 
 modes = {
     struct('id', 'fixed', 'label', '固定阈值', 'useAdaptive', false, 'cfg', []), ...
