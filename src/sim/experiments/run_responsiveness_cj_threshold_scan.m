@@ -27,6 +27,13 @@ fprintf('=================================================\n');
 fprintf('   运动显著性阈值参数扫描：响应性 R\n');
 fprintf('=================================================\n\n');
 
+% --- 实验配置参数 ---
+config = struct();
+config.enable_parallel = true;              % 是否启用并行计算
+config.desired_workers = [];                % 并行工作进程数量，为空则使用默认配置
+config.num_runs = 50;                       % 每个参数点的重复实验次数
+config.num_angles = 1;                      % 计算响应性时的投影方向样本数（1=仅领导者方向）
+
 % --- 基础仿真参数定义 ---
 % 定义一个结构体 `base_params`，用于存储所有仿真共享的基础参数。
 % 这样做便于管理和传递参数。
@@ -50,62 +57,108 @@ base_params.forced_turn_duration = 200;     % 外源脉冲强制转向的持续�
 % --- 参数扫描设置 ---
 cj_thresholds = 0.0:0.1:5.0;                % 定义要扫描的 cj_threshold 参数范围
 num_params = numel(cj_thresholds);          % 扫描的参数点总数
-num_runs = 50;                              % 每个参数点的重复实验次数，用于统计平均
-num_angles = 1;                             % 计算响应性时，投影方向的样本数。1 表示只沿领导者方向。
+num_runs = config.num_runs;                 % 从配置中获取重复次数
+num_angles = config.num_angles;             % 从配置中获取方向样本数
 
 % --- 在控制台输出实验配置信息 ---
 fprintf('扫描范围 cj_threshold ∈ [%.1f, %.1f]，步长 %.1f，共 %d 个参数点。\n', ...
     cj_thresholds(1), cj_thresholds(end), cj_thresholds(2) - cj_thresholds(1), num_params);
-fprintf('每个参数重复次数: %d，方向样本: %d\n\n', num_runs, num_angles);
+fprintf('每个参数重复次数: %d，方向样本: %d\n', num_runs, num_angles);
 
 %% 2. 数据预分配 -----------------------------------------------------------------
 % 为了提高性能，预先分配存储结果的矩阵内存。
 
 time_vec = (0:base_params.T_max)' * base_params.dt; % 创建时间向量，用于后续积分计算
-R_raw = NaN(num_params, num_runs);          % 预分配矩阵，用于存储每次实验原始的响应性 R 值
-trigger_failures = zeros(num_params, 1);    % 预分配向量，用于记录每个参数点下脉冲触发失败的次数
+
+% 计算总任务数（参数点 × 重复次数）
+total_tasks = num_params * num_runs;
+fprintf('总任务数: %d (参数点: %d × 重复: %d)\n', total_tasks, num_params, num_runs);
+
+% 使用线性数组存储结果，便于并行计算（后续重塑为矩阵）
+R_raw_linear = NaN(total_tasks, 1);          % 响应性 R 值线性数组
+triggered_linear = false(total_tasks, 1);    % 触发状态线性数组
+
+% 并行计算池配置
+pool = [];
+if config.enable_parallel
+    pool = configure_parallel_pool(config.desired_workers);
+    fprintf('并行模式启用: %d workers\n', pool.NumWorkers);
+else
+    fprintf('串行模式执行。\n');
+end
+fprintf('\n');
 
 %% 3. 运行参数扫描 ----------------------------------------------------------------
 experiment_tic = tic; % 记录整个实验开始的时间
-total_experiments = num_params * num_runs; % 计算总实验次数
 
-% --- 外层循环：遍历所有参数点 ---
-for param_idx = 1:num_params
-    current_threshold = cj_thresholds(param_idx); % 获取当前参数值
-    params = base_params; % 复制基础参数
-    params.cj_threshold = current_threshold; % 设置当前扫描的 cj_threshold
+% 初始化进度追踪器
+progress_update = create_progress_tracker(total_tasks);
 
-    fprintf('参数 %d/%d：cj_threshold = %.2f\n', param_idx, num_params, current_threshold);
-    param_tic = tic; % 记录当前参数点开始的时间
+% 根据配置选择并行或串行执行
+if config.enable_parallel
+    % 创建进度队列（用于并行模式下的实时进度更新）
+    progress_queue = parallel.pool.DataQueue;
+    afterEach(progress_queue, @(~) progress_update());
 
-    % --- 内层循环：对每个参数点重复运行多次 ---
-    for run_idx = 1:num_runs
-        % 设置随机种子，确保实验的可复现性
+    % --- 并行执行模式：使用 parfor 并行处理所有任务 ---
+    parfor task_idx = 1:total_tasks
+        % 将线性任务索引转换为二维参数索引
+        [run_idx, param_idx] = ind2sub([num_runs, num_params], task_idx);
+
+        % 获取当前参数值
+        current_threshold = cj_thresholds(param_idx);
+        params = base_params;
+        params.cj_threshold = current_threshold;
+
+        % 计算随机种子
         seed = (param_idx - 1) * num_runs + run_idx;
-        
-        % 调用核心函数，运行单次仿真并计算响应性
-        [R_value, triggered] = run_single_responsiveness_trial(params, num_angles, time_vec, seed);
-        
-        % 存储结果
-        R_raw(param_idx, run_idx) = R_value;
-        
-        % 如果脉冲未触发或结果为 NaN，则增加失败计数
-        if ~triggered || isnan(R_value)
-            trigger_failures(param_idx) = trigger_failures(param_idx) + 1;
-        end
 
-        % 每 10 次运行或最后一次运行时，在控制台输出进度
-        if mod(run_idx, 10) == 0 || run_idx == num_runs
-            fprintf('  运行 %2d/%2d 完成 (R=%.3f)\n', run_idx, num_runs, R_value);
+        % 运行单次仿真并计算响应性
+        [R_value, triggered] = run_single_responsiveness_trial(params, num_angles, time_vec, seed);
+
+        % 存储结果
+        R_raw_linear(task_idx) = R_value;
+        triggered_linear(task_idx) = triggered;
+
+        % 发送进度更新信号
+        send(progress_queue, 1);
+    end
+else
+    % --- 串行执行模式：嵌套循环处理任务，提供进度显示 ---
+    current_task = 0;
+    for param_idx = 1:num_params
+        current_threshold = cj_thresholds(param_idx);
+        params = base_params;
+        params.cj_threshold = current_threshold;
+
+        for run_idx = 1:num_runs
+            current_task = current_task + 1;
+
+            % 计算随机种子
+            seed = (param_idx - 1) * num_runs + run_idx;
+
+            % 运行单次仿真并计算响应性
+            [R_value, triggered] = run_single_responsiveness_trial(params, num_angles, time_vec, seed);
+
+            % 存储结果
+            R_raw_linear(current_task) = R_value;
+            triggered_linear(current_task) = triggered;
+
+            % 更新进度
+            progress_update();
         end
     end
-
-    elapsed = toc(param_tic); % 计算当前参数点所有运行的总耗时
-    fprintf('  >>> 参数点耗时 %.1f s，触发失败 %d 次\n', elapsed, trigger_failures(param_idx));
 end
 
 total_elapsed = toc(experiment_tic); % 计算整个实验的总耗时
 fprintf('\n全部实验完成，总耗时 %.1f 分钟\n\n', total_elapsed / 60);
+
+% 将线性数组重塑为矩阵形式
+R_raw = reshape(R_raw_linear, [num_runs, num_params])';
+triggered_matrix = reshape(triggered_linear, [num_runs, num_params])';
+
+% 计算每个参数点的触发失败次数
+trigger_failures = sum(~triggered_matrix | isnan(R_raw), 2);
 
 %% 4. 统计分析 --------------------------------------------------------------------
 % 对每个参数点的多次实验结果进行统计，计算均值、标准差和标准误差。
@@ -171,7 +224,7 @@ results.R_mean = R_mean;                    % R 均值
 results.R_std = R_std;                      % R 标准差
 results.R_sem = R_sem;                      % R 标准误差
 results.trigger_failures = trigger_failures;% 失败次数
-results.total_experiments = total_experiments; % 总实验次数
+results.total_experiments = total_tasks; % 总实验次数
 results.total_time_seconds = total_elapsed; % 总耗时
 results.timestamp = timestamp;              % 时间戳
 results.matlab_version = version;           % MATLAB 版本
@@ -290,4 +343,124 @@ function V = compute_average_velocity(theta, v0)
     %   输出：
     %     - V: 群体的平均速度向量 [Vx, Vy]
     V = [mean(v0 * cos(theta)), mean(v0 * sin(theta))];
+end
+
+function pool = configure_parallel_pool(desired_workers)
+% configure_parallel_pool 配置并行计算池，复用项目统一的并行池管理策略
+%
+% 输入参数:
+%   desired_workers - 期望的并行工作进程数(可选，为空则使用默认值)
+%
+% 输出参数:
+%   pool - 配置好的并行池对象
+%
+% 功能说明:
+%   - 检查Parallel Computing Toolbox许可证
+%   - 智能配置并行工作进程数量
+%   - 复用现有并行池或创建新的并行池
+%
+% 设计原则:
+%   - 避免频繁创建和销毁并行池，提高效率
+%   - 根据系统资源自动调整并行进程数
+%   - 提供清晰的错误信息
+
+    % 参数默认值处理
+    if nargin < 1
+        desired_workers = [];
+    end
+
+    % 检查并行计算工具箱许可证
+    if ~license('test', 'Distrib_Computing_Toolbox')
+        error('需要 Parallel Computing Toolbox 才能运行并行实验。');
+    end
+
+    % 获取本地集群信息和最大可用工作进程数
+    cluster = parcluster('local');
+    max_workers = min(cluster.NumWorkers, 180);  % 限制最大工作进程数，防止资源过载
+    if max_workers < 1
+        error('当前环境未检测到可用的并行 worker。');
+    end
+
+    % 检查是否已有运行的并行池
+    pool = gcp('nocreate');
+    if isempty(pool)
+        % 创建新的并行池
+        workers = select_worker_count(desired_workers, max_workers);
+        pool = parpool(cluster, workers);
+        return;
+    end
+
+    % 如果已有并行池，检查是否需要调整工作进程数
+    if ~isempty(desired_workers)
+        target = select_worker_count(desired_workers, max_workers);
+        if pool.NumWorkers ~= target
+            % 关闭当前并行池并创建新的
+            delete(pool);
+            pool = parpool(cluster, target);
+        end
+    end
+end
+
+function progress_handle = create_progress_tracker(total_tasks)
+% create_progress_tracker 返回一个函数句柄，每调用一次即更新整体进度。
+%
+% 输入:
+%   total_tasks - 需要完成的任务总数
+%
+% 输出:
+%   progress_handle - 无参函数句柄，执行时刷新进度显示
+
+    if total_tasks <= 0
+        progress_handle = @() [];
+        return;
+    end
+
+    count = 0;
+    last_print = tic;
+    start_time = tic;
+    min_interval = 0.5;
+
+    fprintf('进度: 0/%d (0.0%%)', total_tasks);
+
+    progress_handle = @update_progress;
+
+    function update_progress()
+        count = count + 1;
+        if toc(last_print) < min_interval && count < total_tasks
+            return;
+        end
+        pct = count / total_tasks * 100;
+        elapsed = toc(start_time);
+        if count > 0 && elapsed > 0
+            remaining = max(total_tasks - count, 0);
+            eta = (elapsed / count) * remaining;
+            eta_text = sprintf(' ETA %.1fs', eta);
+        else
+            eta_text = '';
+        end
+        fprintf('\r进度: %d/%d (%.1f%%)%s', count, total_tasks, pct, eta_text);
+        last_print = tic;
+        if count >= total_tasks
+            fprintf('\n');
+        end
+    end
+end
+
+function workers = select_worker_count(requested, max_workers)
+% select_worker_count 对用户请求的 worker 数做安全裁剪
+%
+% 输入:
+%   requested   - 用户请求的 worker 数量
+%   max_workers - 系统最大可用 worker 数量
+%
+% 输出:
+%   workers - 实际使用的 worker 数量
+
+    if isempty(requested)
+        % 默认使用最大可用数量
+        workers = max_workers;
+    else
+        % 限制在合理范围内
+        workers = max(1, min(requested, max_workers));
+    end
 end
