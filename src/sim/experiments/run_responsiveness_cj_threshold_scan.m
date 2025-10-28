@@ -1,20 +1,26 @@
 % run_responsiveness_cj_threshold_scan
 % =========================================================================
 % 脚本功能：
-%   针对高阶拓扑外源脉冲场景，扫描“运动显著性阈值 cj_threshold”，
+%   针对高阶拓扑外源脉冲场景，扫描"运动显著性阈值 cj_threshold"，
 %   统计集群响应性指标 R 与其关系。每个参数点重复 50 次，取随机种子
 %   1:50，默认只沿领导者方向计算 r(φ) 并取均值。
 %
 % 参考：visualize_cluster_responsiveness.m 的响应性定义与计算流程。
 %
+% 并行计算：
+%   - 本脚本采用并行计算模式，利用 parfor 加速参数扫描
+%   - 需要 Parallel Computing Toolbox 支持
+%   - 自动检测并使用系统可用的最大 worker 数量（最多 180）
+%
 % 输出：
-%   - 控制台实时进度与统计信息
+%   - 控制台实时进度与统计信息（含 ETA 预估）
 %   - results/responsiveness/ 下保存实验数据 (MAT 文件)
 %   - 自动绘制 R-阈值 关系图（含标准误差）
 %
 % 注意：
 %   - 若某次实验外源脉冲未成功触发，将记录为 NaN 并统计失败次数
 %   - 可根据研究需求调整 num_angles、num_runs 等参数
+%   - 可通过 config.desired_workers 自定义并行 worker 数量
 % =========================================================================
 
 % --- 环境初始化 ---
@@ -29,7 +35,6 @@ fprintf('=================================================\n\n');
 
 % --- 实验配置参数 ---
 config = struct();
-config.enable_parallel = true;              % 是否启用并行计算
 config.desired_workers = [];                % 并行工作进程数量，为空则使用默认配置
 config.num_runs = 50;                       % 每个参数点的重复实验次数
 config.num_angles = 1;                      % 计算响应性时的投影方向样本数（1=仅领导者方向）
@@ -79,14 +84,8 @@ R_raw_linear = NaN(total_tasks, 1);          % 响应性 R 值线性数组
 triggered_linear = false(total_tasks, 1);    % 触发状态线性数组
 
 % 并行计算池配置
-pool = [];
-if config.enable_parallel
-    pool = configure_parallel_pool(config.desired_workers);
-    fprintf('并行模式启用: %d workers\n', pool.NumWorkers);
-else
-    fprintf('串行模式执行。\n');
-end
-fprintf('\n');
+pool = configure_parallel_pool(config.desired_workers);
+fprintf('并行模式启用: %d workers\n\n', pool.NumWorkers);
 
 %% 3. 运行参数扫描 ----------------------------------------------------------------
 experiment_tic = tic; % 记录整个实验开始的时间
@@ -94,60 +93,32 @@ experiment_tic = tic; % 记录整个实验开始的时间
 % 初始化进度追踪器
 progress_update = create_progress_tracker(total_tasks);
 
-% 根据配置选择并行或串行执行
-if config.enable_parallel
-    % 创建进度队列（用于并行模式下的实时进度更新）
-    progress_queue = parallel.pool.DataQueue;
-    afterEach(progress_queue, @(~) progress_update());
+% 创建进度队列（用于并行模式下的实时进度更新）
+progress_queue = parallel.pool.DataQueue;
+afterEach(progress_queue, @(~) progress_update());
 
-    % --- 并行执行模式：使用 parfor 并行处理所有任务 ---
-    parfor task_idx = 1:total_tasks
-        % 将线性任务索引转换为二维参数索引
-        [run_idx, param_idx] = ind2sub([num_runs, num_params], task_idx);
+% --- 并行执行：使用 parfor 并行处理所有任务 ---
+parfor task_idx = 1:total_tasks
+    % 将线性任务索引转换为二维参数索引
+    [run_idx, param_idx] = ind2sub([num_runs, num_params], task_idx);
 
-        % 获取当前参数值
-        current_threshold = cj_thresholds(param_idx);
-        params = base_params;
-        params.cj_threshold = current_threshold;
+    % 获取当前参数值
+    current_threshold = cj_thresholds(param_idx);
+    params = base_params;
+    params.cj_threshold = current_threshold;
 
-        % 计算随机种子
-        seed = (param_idx - 1) * num_runs + run_idx;
+    % 计算随机种子
+    seed = (param_idx - 1) * num_runs + run_idx;
 
-        % 运行单次仿真并计算响应性
-        [R_value, triggered] = run_single_responsiveness_trial(params, num_angles, time_vec, seed);
+    % 运行单次仿真并计算响应性
+    [R_value, triggered] = run_single_responsiveness_trial(params, num_angles, time_vec, seed);
 
-        % 存储结果
-        R_raw_linear(task_idx) = R_value;
-        triggered_linear(task_idx) = triggered;
+    % 存储结果
+    R_raw_linear(task_idx) = R_value;
+    triggered_linear(task_idx) = triggered;
 
-        % 发送进度更新信号
-        send(progress_queue, 1);
-    end
-else
-    % --- 串行执行模式：嵌套循环处理任务，提供进度显示 ---
-    current_task = 0;
-    for param_idx = 1:num_params
-        current_threshold = cj_thresholds(param_idx);
-        params = base_params;
-        params.cj_threshold = current_threshold;
-
-        for run_idx = 1:num_runs
-            current_task = current_task + 1;
-
-            % 计算随机种子
-            seed = (param_idx - 1) * num_runs + run_idx;
-
-            % 运行单次仿真并计算响应性
-            [R_value, triggered] = run_single_responsiveness_trial(params, num_angles, time_vec, seed);
-
-            % 存储结果
-            R_raw_linear(current_task) = R_value;
-            triggered_linear(current_task) = triggered;
-
-            % 更新进度
-            progress_update();
-        end
-    end
+    % 发送进度更新信号
+    send(progress_queue, 1);
 end
 
 total_elapsed = toc(experiment_tic); % 计算整个实验的总耗时
