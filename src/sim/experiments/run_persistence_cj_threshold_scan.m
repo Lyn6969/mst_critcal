@@ -27,7 +27,6 @@ fprintf('=================================================\n\n');
 
 config = struct();
 config.desired_workers = [];              % 期望的并行工作进程数：空表示自动检测
-config.progress_interval = 0.5;            % 进度更新间隔（秒）：控制进度显示频率
 
 base_params = struct();
 base_params.N = 200;                      % 粒子数量：群体中的粒子总数
@@ -118,9 +117,9 @@ end
 total_elapsed = toc(experiment_tic); % 计算整个实验的总耗时
 fprintf('\n全部实验完成，总耗时 %.1f 分钟\n\n', total_elapsed / 60);
 
-% 将线性数组重塑为矩阵形式
-P_raw = reshape(P_raw_linear, [num_params, num_runs]);
-D_raw = reshape(D_raw_linear, [num_params, num_runs]);
+% 将线性数组重塑为矩阵形式（行对应参数点，列对应重复实验）
+P_raw = reshape(P_raw_linear, [num_runs, num_params])';
+D_raw = reshape(D_raw_linear, [num_runs, num_params])';
 
 
 %% 3. 统计与归一化 ---------------------------------------------------------------
