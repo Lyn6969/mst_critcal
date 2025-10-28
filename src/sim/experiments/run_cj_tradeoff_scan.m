@@ -95,7 +95,7 @@ loop_tic = tic;                          % 开始计时整个实验过程：用�
 config = struct();
 config.desired_workers = [];
 config.progress_interval = 5;
-total_tasks = num_params * num_runs;
+total_tasks = num_params;  % 外层并行：任务数改为参数点数
 
 progress_queue = parallel.pool.DataQueue;
 configure_parallel_pool(config.desired_workers);
@@ -104,33 +104,29 @@ fprintf('并行模式: %d workers\n', pool.NumWorkers);
 
 update_progress('init', total_tasks, loop_tic, config.progress_interval);
 afterEach(progress_queue, @(~) update_progress('step'));
-
-for param_idx = 1:num_params
+parfor param_idx = 1:num_params  % 外层并行：改为 parfor
     current_cj = cj_thresholds(param_idx);
-    resp_params.cj_threshold = current_cj;
-    pers_params.cj_threshold = current_cj;
-
-    fprintf('参数 %02d/%02d: cj_threshold = %.2f\n', param_idx, num_params, current_cj);
-    param_tic = tic;
+    resp_params_local = resp_params;  % parfor 要求复制到本地变量
+    pers_params_local = pers_params;
+    resp_params_local.cj_threshold = current_cj;
+    pers_params_local.cj_threshold = current_cj;
 
     local_R = NaN(1, num_runs);
     local_P = NaN(1, num_runs);
     local_D = NaN(1, num_runs);
     local_fail = false(1, num_runs);
 
-    parfor run_idx = 1:num_runs
+    for run_idx = 1:num_runs  % 内层串行：改为 for
         seed_base = base_seed + (param_idx - 1) * num_runs + run_idx;
 
-        [R_value, triggered] = run_single_responsiveness_trial(resp_params, num_angles, time_vec, seed_base);
-        [P_value, D_value] = run_single_persistence_trial(pers_params, pers_cfg, seed_base + 10000);
+        [R_value, triggered] = run_single_responsiveness_trial(resp_params_local, num_angles, time_vec, seed_base);
+        [P_value, D_value] = run_single_persistence_trial(pers_params_local, pers_cfg, seed_base + 10000);
 
         local_fail(run_idx) = (~triggered || isnan(R_value));
 
         local_R(run_idx) = R_value;
         local_P(run_idx) = P_value;
         local_D(run_idx) = D_value;
-
-        send(progress_queue, 1);
     end
 
     R_raw(param_idx, :) = local_R;
@@ -138,8 +134,7 @@ for param_idx = 1:num_params
     diffusion_values(param_idx, :) = local_D;
     trigger_failures(param_idx) = sum(local_fail);
 
-    fprintf('    完成。触发失败 %d 次，用时 %.1fs\n', ...
-        trigger_failures(param_idx), toc(param_tic));
+    send(progress_queue, 1);  % 外层完成后发送进度
 end
 
 total_minutes = toc(loop_tic) / 60;
