@@ -18,7 +18,7 @@
 clc;
 clear;
 close all;
-
+addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 fprintf('=================================================\n');
 fprintf('   自适应显著性阈值扫描 (R / P)\n');
 fprintf('=================================================\n\n');
@@ -69,6 +69,11 @@ P_std = zeros(num_thresholds, 1);
 trigger_failures = zeros(num_thresholds, 1);
 
 %% 3. 并行扫描 -------------------------------------------------------------------
+fprintf('开始扫描 %d 个显著性阈值，每个运行 %d 次...\n', num_thresholds, runs_per_threshold);
+dq = parallel.pool.DataQueue;
+progressPrinter(0, num_thresholds, threshold_list); % 重置进度
+afterEach(dq, @(idx) progressPrinter(idx, num_thresholds, threshold_list));
+
 parfor t_idx = 1:num_thresholds
     sal_thr = threshold_list(t_idx);
 
@@ -99,6 +104,8 @@ parfor t_idx = 1:num_thresholds
     P_mean(t_idx) = mean(P_vals, 'omitnan');
     P_std(t_idx) = std(P_vals, 'omitnan');
     trigger_failures(t_idx) = fail_count;
+
+    send(dq, t_idx);
 end
 
 %% 4. P 归一化 -------------------------------------------------------------------
@@ -149,6 +156,18 @@ fprintf('图像已保存: %s\n', png_file);
 %% ============================================================================
 % 辅助函数
 % ============================================================================
+function progressPrinter(idx, total, threshold_list)
+    persistent count;
+    if idx == 0
+        count = 0;
+        fprintf('进度初始化完成。\n');
+        return;
+    end
+    count = count + 1;
+    thr_val = threshold_list(idx);
+    fprintf('  [%3d/%3d] 完成阈值 %.3f\n', count, total, thr_val);
+end
+
 function [R_value, triggered] = run_single_responsiveness(params, num_angles, time_vec, seed)
     rng(seed);
     sim = ParticleSimulationWithExternalPulse(params);
