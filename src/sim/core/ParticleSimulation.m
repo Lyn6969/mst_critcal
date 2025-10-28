@@ -36,6 +36,10 @@ classdef ParticleSimulation < handle
         radius = 5;          % 邻居查找半径
         deac_threshold = 10; % 取消激活的角度阈值（弧度）
         cj_threshold = 50;   % 激活阈值（弧度/时间）
+        useAdaptiveThreshold = false; % 是否启用自适应运动显著性阈值
+        adaptiveThresholdConfig = struct(); % 自适应阈值配置结构体
+        cj_threshold_dynamic; % [N x 1] 实时阈值
+        local_entropy_state; % [N x 1] 记录局部熵
 
         % 拓扑邻居选择参数
         use_topology = false; % 是否使用拓扑邻居选择（false: 基于半径, true: 基于拓扑）
@@ -88,6 +92,13 @@ classdef ParticleSimulation < handle
                 end
             end
 
+            if obj.useAdaptiveThreshold
+                obj.applyAdaptiveThresholdDefaults();
+            else
+                obj.cj_threshold_dynamic = [];
+                obj.local_entropy_state = [];
+            end
+
             % 场地大小设置
             if obj.useFixedField
                 obj.simulationAreaSize = obj.fieldSize;
@@ -124,14 +135,18 @@ classdef ParticleSimulation < handle
                 % 原有模式：全区域随机初始化
                 [dispersed_positions, ~] = obj.generateDispersedPositions(obj.N);
                 obj.positions = dispersed_positions';
-                obj.theta = rand(obj.N, 1) * 2 * pi;      % 随机分布方向
-            end
+            obj.theta = rand(obj.N, 1) * 2 * pi;      % 随机分布方向
+        end
 
-            obj.previousPositions = obj.positions;     % 上一时刻的位置
-            obj.isActive = false(obj.N, 1);           % 初始化激活状态
-            obj.src_ids = cell(obj.N, 1);             % 初始化源头 ID 数组
-            obj.order_parameter = zeros(obj.T_max, 1);
-            obj.activated_counts = zeros(obj.T_max, 1);
+        obj.previousPositions = obj.positions;     % 上一时刻的位置
+        obj.isActive = false(obj.N, 1);           % 初始化激活状态
+        obj.src_ids = cell(obj.N, 1);             % 初始化源头 ID 数组
+        obj.order_parameter = zeros(obj.T_max, 1);
+        obj.activated_counts = zeros(obj.T_max, 1);
+
+        if obj.useAdaptiveThreshold
+            obj.initializeAdaptiveThresholdState();
+        end
         end
 
         function [final_positions, final_velocities] = generateDispersedPositions(obj, num_agents)
@@ -436,6 +451,11 @@ classdef ParticleSimulation < handle
 
             % 1. 查找邻居
             neighbor_matrix = obj.findNeighbors();
+
+            if obj.useAdaptiveThreshold
+                obj.updateAdaptiveThresholds(neighbor_matrix);
+            end
+
             desired_theta = NaN(obj.N, 1);
 
             % 2. 更新粒子状态和期望方向
@@ -509,7 +529,8 @@ classdef ParticleSimulation < handle
                         % 找出显著性最高的邻居
                         [max_s, max_s_idx] = max(s_values);
 
-                        if max_s > obj.cj_threshold
+                        threshold_i = obj.getActivationThreshold(i);
+                        if max_s > threshold_i
                             % 激活并只跟随最显著的邻居
                             obj.isActive(i) = true;
                             obj.src_ids{i} = neibor_idx(max_s_idx);  % 只存储显著性最高的邻居ID
@@ -539,6 +560,126 @@ classdef ParticleSimulation < handle
             % 5. 计算并存储阶参数和激活个体数
             obj.order_parameter(t_step) = norm(sum(exp(1j * obj.theta))) / obj.N;
             obj.activated_counts(t_step) = sum(obj.isActive);
+        end
+
+        function applyAdaptiveThresholdDefaults(obj)
+        % applyAdaptiveThresholdDefaults 补全自适应阈值配置
+            cfg = obj.adaptiveThresholdConfig;
+
+            if ~isfield(cfg, 'cj_low') || ~isnumeric(cfg.cj_low)
+                cfg.cj_low = max(0.1, obj.cj_threshold * 0.5);
+            end
+            if ~isfield(cfg, 'cj_high') || ~isnumeric(cfg.cj_high)
+                cfg.cj_high = max(cfg.cj_low, obj.cj_threshold);
+            end
+            if cfg.cj_high < cfg.cj_low
+                tmp = cfg.cj_low;
+                cfg.cj_low = cfg.cj_high;
+                cfg.cj_high = tmp;
+            end
+            if ~isfield(cfg, 'entropy_bins') || ~isnumeric(cfg.entropy_bins)
+                cfg.entropy_bins = 18;
+            end
+            cfg.entropy_bins = max(4, round(cfg.entropy_bins));
+            if ~isfield(cfg, 'entropy_threshold_low') || ~isnumeric(cfg.entropy_threshold_low)
+                cfg.entropy_threshold_low = 0.2;
+            end
+            if ~isfield(cfg, 'entropy_threshold_high') || ~isnumeric(cfg.entropy_threshold_high)
+                cfg.entropy_threshold_high = 0.6;
+            end
+            if cfg.entropy_threshold_high < cfg.entropy_threshold_low
+                tmp = cfg.entropy_threshold_low;
+                cfg.entropy_threshold_low = cfg.entropy_threshold_high;
+                cfg.entropy_threshold_high = tmp;
+            end
+            if ~isfield(cfg, 'min_neighbors') || ~isnumeric(cfg.min_neighbors)
+                cfg.min_neighbors = 3;
+            end
+            cfg.min_neighbors = max(1, round(cfg.min_neighbors));
+            if ~isfield(cfg, 'include_self') || ~islogical(cfg.include_self)
+                cfg.include_self = true;
+            end
+            if ~isfield(cfg, 'smoothing_weight') || ~isnumeric(cfg.smoothing_weight)
+                cfg.smoothing_weight = 0.6;
+            end
+            cfg.smoothing_weight = min(max(cfg.smoothing_weight, 0), 0.999);
+            if ~isfield(cfg, 'fallback_entropy') || ~isnumeric(cfg.fallback_entropy)
+                cfg.fallback_entropy = 1.0;
+            end
+            cfg.fallback_entropy = min(max(cfg.fallback_entropy, 0), 1);
+
+            obj.adaptiveThresholdConfig = cfg;
+        end
+
+        function initializeAdaptiveThresholdState(obj)
+        % initializeAdaptiveThresholdState 初始化自适应阈值状态
+            obj.cj_threshold_dynamic = ones(obj.N, 1) * obj.cj_threshold;
+            obj.local_entropy_state = zeros(obj.N, 1);
+        end
+
+        function updateAdaptiveThresholds(obj, neighbor_matrix)
+        % updateAdaptiveThresholds 根据局部熵更新实时阈值
+            cfg = obj.adaptiveThresholdConfig;
+            if isempty(obj.cj_threshold_dynamic) || numel(obj.cj_threshold_dynamic) ~= obj.N
+                obj.initializeAdaptiveThresholdState();
+            end
+
+            num_bins = cfg.entropy_bins;
+            edges = linspace(-pi, pi, num_bins + 1);
+
+            low_thr = cfg.entropy_threshold_low;
+            high_thr = cfg.entropy_threshold_high;
+            denom = max(high_thr - low_thr, eps);
+            smooth_w = cfg.smoothing_weight;
+
+            for i = 1:obj.N
+                neighbor_idx = find(neighbor_matrix(i, :));
+                if cfg.include_self
+                    angles = [obj.theta(i); obj.theta(neighbor_idx)];
+                else
+                    angles = obj.theta(neighbor_idx);
+                end
+
+                if numel(angles) < cfg.min_neighbors
+                    entropy_norm = cfg.fallback_entropy;
+                else
+                    wrapped_angles = wrapToPi(angles);
+                    counts = histcounts(wrapped_angles, edges);
+                    total_counts = sum(counts);
+                    if total_counts <= 0
+                        entropy_norm = 0;
+                    else
+                        probabilities = counts / total_counts;
+                        probabilities = probabilities(probabilities > 0);
+                        entropy_raw = -sum(probabilities .* log(probabilities));
+                        entropy_norm = entropy_raw / log(num_bins);
+                    end
+                    entropy_norm = min(max(entropy_norm, 0), 1);
+                end
+
+                obj.local_entropy_state(i) = entropy_norm;
+
+                if entropy_norm <= low_thr
+                    target_cj = cfg.cj_low;
+                elseif entropy_norm >= high_thr
+                    target_cj = cfg.cj_high;
+                else
+                    ratio = (entropy_norm - low_thr) / denom;
+                    target_cj = cfg.cj_low + ratio * (cfg.cj_high - cfg.cj_low);
+                end
+
+                obj.cj_threshold_dynamic(i) = smooth_w * obj.cj_threshold_dynamic(i) + ...
+                    (1 - smooth_w) * target_cj;
+            end
+        end
+
+        function threshold = getActivationThreshold(obj, idx)
+        % getActivationThreshold 获取粒子的当前阈值
+            if obj.useAdaptiveThreshold && ~isempty(obj.cj_threshold_dynamic)
+                threshold = obj.cj_threshold_dynamic(idx);
+            else
+                threshold = obj.cj_threshold;
+            end
         end
 
         function runSimulation(obj)

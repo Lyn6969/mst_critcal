@@ -231,6 +231,11 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
 
             % === 原有的邻居查找和状态更新逻辑 ===
             neighbor_matrix = obj.findNeighbors();
+
+            if obj.useAdaptiveThreshold
+                obj.updateAdaptiveThresholds(neighbor_matrix);
+            end
+
             desired_theta = NaN(obj.N, 1);
 
             % 2. 更新粒子状态和期望方向（原有逻辑）
@@ -304,7 +309,8 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
                         % 找出显著性最高的邻居
                         [max_s, max_s_idx] = max(s_values);
 
-                        if max_s > obj.cj_threshold
+                        threshold_i = obj.getActivationThreshold(i);
+                        if max_s > threshold_i
                             % 激活并只跟随最显著的邻居
                             obj.isActive(i) = true;
                             obj.src_ids{i} = neibor_idx(max_s_idx);  % 只存储显著性最高的邻居ID
@@ -424,6 +430,10 @@ classdef ParticleSimulationWithExternalPulse < ParticleSimulation
             obj.src_ids = cell(obj.N, 1);
             for i = 1:obj.N
                 obj.src_ids{i} = [];
+            end
+
+            if obj.useAdaptiveThreshold
+                obj.initializeAdaptiveThresholdState();
             end
 
             if obj.logEnabled
