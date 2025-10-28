@@ -27,7 +27,7 @@
 clc;            % 清空命令行窗口
 clear;          % 清除工作区所有变量
 close all;      % 关闭所有图形窗口
-
+addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 %% 1. 实验总体配置 ---------------------------------------------------------------
 fprintf('=================================================\n');
 fprintf('   运动显著性阈值参数扫描：响应性 R\n');
@@ -47,7 +47,7 @@ base_params.N = 200;                        % 粒子数量
 base_params.rho = 1;                        % 粒子间相互作用的拓扑范围参数
 base_params.v0 = 1;                         % 粒子速度大小
 base_params.angleUpdateParameter = 10;      % 角度更新参数 (eta)
-base_params.angleNoiseIntensity = 0;        % 角度更新噪声强度
+base_params.angleNoiseIntensity = 0.05;        % 角度更新噪声强度
 base_params.T_max = 400;                    % 单次仿真总步数
 base_params.dt = 0.1;                       % 仿真时间步长
 base_params.radius = 5;                     % 粒子间的物理作用半径（用于邻居搜索）
@@ -85,7 +85,7 @@ triggered_linear = false(total_tasks, 1);    % 触发状态线性数组
 
 % 并行计算池配置
 pool = configure_parallel_pool(config.desired_workers);
-fprintf('并行模式启用: %d workers\n\n', pool.NumWorkers);
+fprintf('并行模式启用: % workers\n\n', pool.NumWorkers);
 
 %% 3. 运行参数扫描 ----------------------------------------------------------------
 experiment_tic = tic; % 记录整个实验开始的时间

@@ -89,49 +89,57 @@ fprintf('扫描参数点: %d，重复次数: %d，噪声强度: %.3f\n\n', ...
 base_seed = 20250301;                    % 基础随机种子：确保实验可重复性
 loop_tic = tic;                          % 开始计时整个实验过程：用于统计总实验时间
 
-% 外层循环：遍历所有cj_threshold参数值
+% 并行配置
+config = struct();
+config.desired_workers = [];
+config.progress_interval = 5;
+total_tasks = num_params * num_runs;
+
+progress_queue = parallel.pool.DataQueue;
+configure_parallel_pool(config.desired_workers);
+pool = gcp();
+fprintf('并行模式: %d workers\n', pool.NumWorkers);
+
+update_progress('init', total_tasks, loop_tic, config.progress_interval);
+afterEach(progress_queue, @(~) update_progress('step'));
+
 for param_idx = 1:num_params
-    current_cj = cj_thresholds(param_idx);  % 当前cj_threshold值：获取当前要测试的显著性阈值
-    resp_params.cj_threshold = current_cj;  % 设置响应性实验的cj_threshold
-    pers_params.cj_threshold = current_cj;  % 设置持久性实验的cj_threshold
+    current_cj = cj_thresholds(param_idx);
+    resp_params.cj_threshold = current_cj;
+    pers_params.cj_threshold = current_cj;
 
     fprintf('参数 %02d/%02d: cj_threshold = %.2f\n', param_idx, num_params, current_cj);
-    param_tic = tic;                      % 开始计时当前参数点的实验
+    param_tic = tic;
 
-    % 内层循环：对当前参数点进行多次重复实验
-    for run_idx = 1:num_runs
-        % 为每次实验生成独立的随机种子（避免相关性）
+    local_R = NaN(1, num_runs);
+    local_P = NaN(1, num_runs);
+    local_D = NaN(1, num_runs);
+    local_fail = false(1, num_runs);
+
+    parfor run_idx = 1:num_runs
         seed_base = base_seed + (param_idx - 1) * num_runs + run_idx;
 
-        % === 响应性试验 ===
-        % 运行单次响应性试验，测量群体对外源脉冲的响应能力
         [R_value, triggered] = run_single_responsiveness_trial(resp_params, num_angles, time_vec, seed_base);
-        R_raw(param_idx, run_idx) = R_value;  % 存储响应性结果
-        
-        % 检查是否触发失败（外源脉冲未成功触发）
-        if ~triggered || isnan(R_value)
-            trigger_failures(param_idx) = trigger_failures(param_idx) + 1;
-        end
-
-        % === 持久性试验 ===
-        % 运行单次持久性试验，测量群体运动的稳定性
-        % 使用不同随机序列避免交叉影响（种子偏移10000）
         [P_value, D_value] = run_single_persistence_trial(pers_params, pers_cfg, seed_base + 10000);
-        P_raw(param_idx, run_idx) = P_value;      % 存储持久性结果
-        diffusion_values(param_idx, run_idx) = D_value;  % 存储扩散系数
 
-        % 进度显示：每10次运行或最后一次运行时显示当前结果
-        if mod(run_idx, 10) == 0 || run_idx == num_runs
-            fprintf('  - 运行 %02d/%02d：R=%.3f, P=%.3f\n', run_idx, num_runs, R_value, P_value);
-        end
+        local_fail(run_idx) = (~triggered || isnan(R_value));
+
+        local_R(run_idx) = R_value;
+        local_P(run_idx) = P_value;
+        local_D(run_idx) = D_value;
+
+        send(progress_queue, 1);
     end
 
-    % 显示当前参数点的完成情况
+    R_raw(param_idx, :) = local_R;
+    P_raw(param_idx, :) = local_P;
+    diffusion_values(param_idx, :) = local_D;
+    trigger_failures(param_idx) = sum(local_fail);
+
     fprintf('    完成。触发失败 %d 次，用时 %.1fs\n', ...
         trigger_failures(param_idx), toc(param_tic));
 end
 
-% 计算并显示总实验时间
 total_minutes = toc(loop_tic) / 60;
 fprintf('\n全部实验完成，总耗时 %.2f 分钟\n\n', total_minutes);
 
@@ -151,40 +159,54 @@ P_sem = P_std ./ sqrt(num_runs);         % 持久性标准误差：持久性均�
 % 扩散系数统计
 D_mean = mean(diffusion_values, 2, 'omitnan');  % 扩散系数均值：每个参数下的平均扩散系数
 
+% 持久性全局归一化
+valid_P = P_raw(~isnan(P_raw));
+if isempty(valid_P) || range(valid_P) < eps
+    warning('持久性数据无法归一化，全部置零');
+    P_norm_raw = zeros(size(P_raw));
+else
+    P_min = min(valid_P);
+    P_range = max(valid_P) - P_min;
+    P_norm_raw = (P_raw - P_min) / P_range;
+end
+P_norm_mean = mean(P_norm_raw, 2, 'omitnan');
+P_norm_std = std(P_norm_raw, 0, 2, 'omitnan');
+P_norm_sem = P_norm_std ./ sqrt(num_runs);
+
 %% 4. 绘制权衡图 -----------------------------------------------------------------
 % 创建响应性-持久性权衡关系图
 figure('Name', 'cj 阈值调节响应性-持久性权衡', 'Color', 'white', 'Position', [120, 120, 900, 600]);
 hold on;                                 % 保持当前图形，允许叠加绘制
 
-% 绘制散点图：x轴为响应性，y轴为持久性，颜色编码cj_threshold值
-scatter_handle = scatter(R_mean, P_mean, 70, cj_thresholds, 'filled');
+% 绘制散点图：x轴为响应性，y轴为（归一化）持久性，颜色编码cj_threshold值
+scatter_handle = scatter(R_mean, P_norm_mean, 70, cj_thresholds, 'filled');
 colormap(parula);                        % 使用parula颜色映射：从蓝到红的渐变色
 cb = colorbar;                           % 添加颜色条：显示cj_threshold与颜色的对应关系
 cb.Label.String = 'cj\_threshold';       % 颜色条标签：说明颜色代表的参数
 
 % 为每个数据点添加误差棒
 for idx = 1:num_params
-    if isnan(R_mean(idx)) || isnan(P_mean(idx))
+    if isnan(R_mean(idx)) || isnan(P_norm_mean(idx))
         continue;                        % 跳过无效数据点
     end
     % 绘制误差棒：水平和垂直方向分别表示响应性和持久性的标准误差
-    errorbar(R_mean(idx), P_mean(idx), P_sem(idx), P_sem(idx), R_sem(idx), R_sem(idx), ...
+    errorbar(R_mean(idx), P_norm_mean(idx), P_norm_sem(idx), P_norm_sem(idx), R_sem(idx), R_sem(idx), ...
         'Color', [0.35 0.35 0.35], 'LineWidth', 0.9, 'CapSize', 6);
 end
 
 % 绘制趋势线（连接各数据点）
-plot(R_mean, P_mean, '-', 'Color', [0.25 0.45 0.8], 'LineWidth', 1.2);
+plot(R_mean, P_norm_mean, '-', 'Color', [0.25 0.45 0.8], 'LineWidth', 1.2);
 
 % 设置图形标签和标题
 xlabel('响应性 R');                      % x轴标签：群体对外源脉冲的响应能力
-ylabel('持久性 P');                      % y轴标签：群体运动的稳定性
+ylabel('归一化持久性 \hat{P}');        % y轴标签：归一化后的持久性
 title('运动显著性阈值下的响应性-持久性权衡');  % 图形标题：展示核心研究问题
 grid on;                                 % 显示网格：便于读取数值
 set(gca, 'FontSize', 11);                % 设置坐标轴字体大小：提高可读性
 
 % 添加关键参数点的文本标注
-text(R_mean(1), P_mean(1), '  cj=0.0', 'Color', [0.2 0.2 0.2]);  % 起始点：最低阈值
-text(R_mean(end), P_mean(end), sprintf('  cj=%.1f', cj_thresholds(end)), ...
+text(R_mean(1), P_norm_mean(1), '  cj=0.0', 'Color', [0.2 0.2 0.2]);  % 起始点：最低阈值
+text(R_mean(end), P_norm_mean(end), sprintf('  cj=%.1f', cj_thresholds(end)), ...
     'Color', [0.2 0.2 0.2]);  % 结束点：最高阈值
 
 % 保存图形
@@ -211,9 +233,14 @@ results.R_sem = R_sem;                              % 响应性标准误差
 results.P_mean = P_mean;                            % 持久性均值
 results.P_std = P_std;                              % 持久性标准差
 results.P_sem = P_sem;                              % 持久性标准误差
+results.P_norm_mean = P_norm_mean;                  % 归一化持久性均值
+results.P_norm_std = P_norm_std;                    % 归一化持久性标准差
+results.P_norm_sem = P_norm_sem;                    % 归一化持久性标准误差
 results.D_mean = D_mean;                            % 扩散系数均值
 results.total_minutes = total_minutes;              % 总实验时间
+results.config = config;
 results.matlab_version = version;                   % MATLAB版本信息
+results.P_norm_raw = P_norm_raw;
 
 % 保存为MAT文件（使用-v7.3格式支持大文件）
 save(output_mat, 'results', '-v7.3');
@@ -408,4 +435,50 @@ function V = compute_average_velocity(theta, v0)
     % 将角度转换为速度向量并计算平均值
     % 使用三角函数将角度转换为x和y方向的速度分量，然后计算平均值
     V = [mean(v0 * cos(theta)), mean(v0 * sin(theta))];
+end
+
+function pool = configure_parallel_pool(desired_workers)
+    pool = gcp('nocreate');
+    if isempty(pool)
+        if isempty(desired_workers)
+            pool = parpool;
+        else
+            pool = parpool(desired_workers);
+        end
+    elseif ~isempty(desired_workers) && pool.NumWorkers ~= desired_workers
+        delete(pool);
+        pool = parpool(desired_workers);
+    end
+end
+
+function update_progress(mode, varargin)
+    persistent total completed start_timer interval last_tic
+
+    switch mode
+        case 'init'
+            total_tasks = varargin{1};
+            timer_handle = varargin{2};
+            interval_minutes = varargin{3};
+
+            total = total_tasks;
+            completed = 0;
+            start_timer = timer_handle;
+            interval = interval_minutes;
+            last_tic = tic;
+            fprintf('  进度: 0%% (0/%d)\n', total);
+        case 'step'
+            if isempty(total)
+                return;
+            end
+            completed = completed + 1;
+            if toc(last_tic) < interval && completed < total
+                return;
+            end
+            elapsed = toc(start_timer);
+            avg_time = elapsed / completed;
+            remaining = avg_time * max(total - completed, 0);
+            fprintf('  进度: %.1f%% (%d/%d) | 已用 %.1f 分 | 预计剩余 %.1f 分\n', ...
+                100 * completed / total, completed, total, elapsed / 60, remaining / 60);
+            last_tic = tic;
+    end
 end
