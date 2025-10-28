@@ -160,14 +160,26 @@ end
 % 创建图形窗口并设置属性
 figure('Name', '响应性 vs 运动显著性阈值', 'Color', 'white', 'Position', [120, 120, 900, 540]);
 
-% 使用 errorbar 绘制均值和标准误差
-errorbar(cj_thresholds, R_mean, R_sem, 'o-', 'LineWidth', 1.6, ...
-    'MarkerSize', 5, 'MarkerFaceColor', [0.2 0.5 0.8]);
+% 计算阴影区域的上下边界
+upper_bound = R_mean + R_sem;
+lower_bound = R_mean - R_sem;
+
+% 创建透明阴影区域表示均值±标准误差范围
+fill([cj_thresholds, flip(cj_thresholds)], [upper_bound, flip(lower_bound)], ...
+    [0.2 0.5 0.8], 'FaceAlpha', 0.3, 'EdgeColor', 'none', 'DisplayName', '均值±标准误差');
+
+% 绘制均值曲线
+hold on;
+plot(cj_thresholds, R_mean, 'o-', 'LineWidth', 1.6, ...
+    'MarkerSize', 5, 'MarkerFaceColor', [0.2 0.5 0.8], 'MarkerEdgeColor', [0.2 0.5 0.8], ...
+    'DisplayName', '响应性均值');
+hold off;
 
 grid on; % 显示网格
 xlabel('运动显著性阈值 c_j'); % X轴标签
 ylabel('响应性指标 R'); % Y轴标签
 title(sprintf('R 随 c_j 变化 (每点重复 %d 次)', num_runs)); % 图形标题
+legend('show', 'Location', 'best'); % 显示图例
 
 %% 6. 保存数据 --------------------------------------------------------------------
 % 将实验配置和所有结果保存到 MAT 文件中，以便后续分析。
