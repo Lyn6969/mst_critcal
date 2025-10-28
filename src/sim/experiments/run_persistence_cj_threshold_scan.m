@@ -19,7 +19,7 @@
 clc;            % 清空命令行窗口，确保输出信息清晰
 clear;          % 清空工作空间变量，避免变量冲突
 close all;      % 关闭所有图形窗口，释放图形资源
-
+addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 %% 1. 参数设定 ------------------------------------------------------------------
 fprintf('=================================================\n');
 fprintf('   持久性扫描 (固定噪声、遍历 cj_threshold)\n');
@@ -27,7 +27,7 @@ fprintf('=================================================\n\n');
 
 config = struct();
 config.desired_workers = [];              % 期望的并行工作进程数：空表示自动检测
-config.progress_interval = 5;              % 进度更新间隔（分钟）：控制进度显示频率
+config.progress_interval = 0.5;            % 进度更新间隔（秒）：控制进度显示频率
 
 base_params = struct();
 base_params.N = 200;                      % 粒子数量：群体中的粒子总数
@@ -72,44 +72,56 @@ base_seed = 20250320;                   % 基础随机种子：确保实验可�
 total_timer = tic;                       % 开始计时整个实验过程：用于统计总实验时间
 
 total_tasks = num_params * num_runs;     % 总任务数：参数点数乘以重复次数
-progress_queue = parallel.pool.DataQueue; % 并行进度队列：用于在并行计算中传递进度信息
-configure_parallel_pool(config.desired_workers);  % 配置并行计算池
-pool = gcp();                            % 获取当前并行计算池
-fprintf('并行模式: %d workers\n', pool.NumWorkers);  % 显示并行工作进程数
 
-update_progress('init', total_tasks, total_timer, config.progress_interval);  % 初始化进度跟踪
-afterEach(progress_queue, @(~) update_progress('step'));  % 设置进度更新回调函数
+% 使用线性数组存储结果，便于并行计算（后续重塑为矩阵）
+P_raw_linear = NaN(total_tasks, 1);       % 持久性原始数据线性数组
+D_raw_linear = NaN(total_tasks, 1);       % 扩散系数原始数据线性数组
 
-% 结果容器预分配（遵循MATLAB性能优化原则：内存预分配）
-P_raw = NaN(num_params, num_runs);       % 持久性原始数据矩阵：存储每次实验的持久性测量值
-D_raw = NaN(num_params, num_runs);       % 扩散系数原始数据矩阵：存储每次实验拟合得到的扩散系数
+% 并行计算池配置
+pool = configure_parallel_pool(config.desired_workers);
+fprintf('并行模式启用: %d workers\n\n', pool.NumWorkers);
+
+% 初始化进度追踪器
+progress_update = create_progress_tracker(total_tasks);
+
+% 创建进度队列（用于并行模式下的实时进度更新）
+progress_queue = parallel.pool.DataQueue;
+afterEach(progress_queue, @(~) progress_update());
 
 %% 2. 批量实验 ------------------------------------------------------------------
-% 使用并行循环加速实验过程
-parfor param_idx = 1:num_params
-    current_cj = cj_thresholds(param_idx);  % 当前cj_threshold值：获取当前要测试的显著性阈值
-    params_local = base_params;             % 创建本地参数副本：避免并行计算中的变量冲突
-    params_local.cj_threshold = current_cj;  % 设置当前参数点的cj_threshold值
+experiment_tic = tic; % 记录整个实验开始的时间
 
-    % 本地结果容器（每个并行工作进程独立使用）
-    local_P = NaN(1, num_runs);            % 本地持久性结果数组：存储当前参数点的所有重复实验结果
-    local_D = NaN(1, num_runs);            % 本地扩散系数结果数组：存储当前参数点的所有扩散系数
-
-    % 内层循环：对当前参数点进行多次重复实验
-    for run_idx = 1:num_runs
-        seed = base_seed + (param_idx - 1) * num_runs + run_idx;  % 生成唯一随机种子
-        [P_val, D_val] = run_single_persistence_trial(params_local, cfg, seed);  % 运行单次持久性试验
-        local_P(run_idx) = P_val;           % 存储持久性结果
-        local_D(run_idx) = D_val;           % 存储扩散系数
-        send(progress_queue, 1);             % 发送进度更新信号
-    end
-
-    % 将本地结果写入全局结果矩阵
-    P_raw(param_idx, :) = local_P;          % 存储当前参数点的持久性结果
-    D_raw(param_idx, :) = local_D;          % 存储当前参数点的扩散系数结果
+% --- 并行执行：使用 parfor 并行处理所有任务 ---
+parfor task_idx = 1:total_tasks
+    % 将线性任务索引转换为二维参数索引
+    [run_idx, param_idx] = ind2sub([num_runs, num_params], task_idx);
+    
+    % 获取当前参数值
+    current_cj = cj_thresholds(param_idx);
+    params_local = base_params;
+    params_local.cj_threshold = current_cj;
+    
+    % 计算随机种子
+    seed = base_seed + (param_idx - 1) * num_runs + run_idx;
+    
+    % 运行单次持久性试验
+    [P_val, D_val] = run_single_persistence_trial(params_local, cfg, seed);
+    
+    % 存储结果到线性数组
+    P_raw_linear(task_idx) = P_val;
+    D_raw_linear(task_idx) = D_val;
+    
+    % 发送进度更新信号
+    send(progress_queue, 1);
 end
 
-fprintf('\n全部实验完成，总耗时 %.2f 分钟\n\n', toc(total_timer) / 60);  % 显示总实验时间
+total_elapsed = toc(experiment_tic); % 计算整个实验的总耗时
+fprintf('\n全部实验完成，总耗时 %.1f 分钟\n\n', total_elapsed / 60);
+
+% 将线性数组重塑为矩阵形式
+P_raw = reshape(P_raw_linear, [num_params, num_runs]);
+D_raw = reshape(D_raw_linear, [num_params, num_runs]);
+
 
 %% 3. 统计与归一化 ---------------------------------------------------------------
 % 对原始数据进行统计分析，计算均值、标准差和标准误差
@@ -266,66 +278,121 @@ function [P_value, D_value] = run_single_persistence_trial(params, cfg, seed)
 end
 
 function pool = configure_parallel_pool(desired_workers)
-    % 配置并行计算池：管理并行计算资源
-    % 输入：
-    %   desired_workers - 期望的工作进程数，空表示自动检测
-    % 输出：
-    %   pool - 配置好的并行计算池对象
-    
-    pool = gcp('nocreate');               % 获取当前并行池（不创建新池）
-    if isempty(pool)                       % 如果不存在并行池
-        if isempty(desired_workers)         % 如果未指定工作进程数
-            pool = parpool;                % 使用默认设置创建并行池
-        else
-            pool = parpool(desired_workers);  % 使用指定的工作进程数创建并行池
+% configure_parallel_pool 配置并行计算池，复用项目统一的并行池管理策略
+%
+% 输入参数:
+%   desired_workers - 期望的并行工作进程数(可选，为空则使用默认值)
+%
+% 输出参数:
+%   pool - 配置好的并行池对象
+%
+% 功能说明:
+%   - 检查Parallel Computing Toolbox许可证
+%   - 智能配置并行工作进程数量
+%   - 复用现有并行池或创建新的并行池
+%
+% 设计原则:
+%   - 避免频繁创建和销毁并行池，提高效率
+%   - 根据系统资源自动调整并行进程数
+%   - 提供清晰的错误信息
+
+    % 参数默认值处理
+    if nargin < 1
+        desired_workers = [];
+    end
+
+    % 检查并行计算工具箱许可证
+    if ~license('test', 'Distrib_Computing_Toolbox')
+        error('需要 Parallel Computing Toolbox 才能运行并行实验。');
+    end
+
+    % 获取本地集群信息和最大可用工作进程数
+    cluster = parcluster('local');
+    max_workers = min(cluster.NumWorkers, 180);  % 限制最大工作进程数，防止资源过载
+    if max_workers < 1
+        error('当前环境未检测到可用的并行 worker。');
+    end
+
+    % 检查是否已有运行的并行池
+    pool = gcp('nocreate');
+    if isempty(pool)
+        % 创建新的并行池
+        workers = select_worker_count(desired_workers, max_workers);
+        pool = parpool(cluster, workers);
+        return;
+    end
+
+    % 如果已有并行池，检查是否需要调整工作进程数
+    if ~isempty(desired_workers)
+        target = select_worker_count(desired_workers, max_workers);
+        if pool.NumWorkers ~= target
+            % 关闭当前并行池并创建新的
+            delete(pool);
+            pool = parpool(cluster, target);
         end
-    elseif ~isempty(desired_workers) && pool.NumWorkers ~= desired_workers
-        % 如果存在并行池但工作进程数不符合要求
-        delete(pool);                      % 删除现有并行池
-        pool = parpool(desired_workers);    % 创建新的并行池
     end
 end
 
-function update_progress(mode, total_tasks, total_timer_handle, interval_minutes)
-    % 进度更新函数：在并行计算中显示实验进度
-    % 输入：
-    %   mode - 模式：'init'初始化进度跟踪，'step'更新进度
-    %   total_tasks - 总任务数：需要完成的实验总数
-    %   total_timer_handle - 总计时器句柄：用于计算总耗时
-    %   interval_minutes - 更新间隔（分钟）：控制进度显示频率
-    
-    % 持久变量：在函数调用间保持状态
-    persistent total completed start_handle progress_interval last_tic
+function progress_handle = create_progress_tracker(total_tasks)
+% create_progress_tracker 返回一个函数句柄，每调用一次即更新整体进度。
+%
+% 输入:
+%   total_tasks - 需要完成的任务总数
+%
+% 输出:
+%   progress_handle - 无参函数句柄，执行时刷新进度显示
 
-    switch mode
-        case 'init'                        % 初始化模式
-            total = total_tasks;             % 设置总任务数
-            completed = 0;                  % 初始化已完成任务数
-            start_handle = total_timer_handle; % 保存总计时器句柄
-            progress_interval = interval_minutes * 60;  % 转换为秒
-            last_tic = tic;                 % 开始计时进度更新间隔
-            fprintf('  进度: 0%% (0/%d)\n', total);  % 显示初始进度
+    if total_tasks <= 0
+        progress_handle = @() [];
+        return;
+    end
 
-        case 'step'                         % 进度更新模式
-            if isempty(total)                 % 检查是否已初始化
-                return;
-            end
-            completed = completed + 1;       % 增加已完成任务数
-            
-            % 检查是否需要更新显示（避免过于频繁的更新）
-            if toc(last_tic) < progress_interval && completed < total
-                return;
-            end
-            
-            % 计算时间和进度信息
-            elapsed_seconds = toc(start_handle);  % 已用时间（秒）
-            avg_time = elapsed_seconds / completed;  % 平均每任务时间（秒）
-            remaining_seconds = avg_time * max(total - completed, 0);  % 预计剩余时间（秒）
-            
-            % 显示进度信息
-            fprintf('  进度: %.1f%% (%d/%d) | 已用 %.1f 分 | 预计剩余 %.1f 分\n', ...
-                100 * completed / total, completed, total, ...
-                elapsed_seconds / 60, remaining_seconds / 60);
-            last_tic = tic;                 % 重置进度更新计时器
+    count = 0;
+    last_print = tic;
+    start_time = tic;
+    min_interval = 0.5;
+
+    fprintf('进度: 0/%d (0.0%%)', total_tasks);
+
+    progress_handle = @update_progress;
+
+    function update_progress()
+        count = count + 1;
+        if toc(last_print) < min_interval && count < total_tasks
+            return;
+        end
+        pct = count / total_tasks * 100;
+        elapsed = toc(start_time);
+        if count > 0 && elapsed > 0
+            remaining = max(total_tasks - count, 0);
+            eta = (elapsed / count) * remaining;
+            eta_text = sprintf(' ETA %.1fs', eta);
+        else
+            eta_text = '';
+        end
+        fprintf('\r进度: %d/%d (%.1f%%)%s', count, total_tasks, pct, eta_text);
+        last_print = tic;
+        if count >= total_tasks
+            fprintf('\n');
+        end
+    end
+end
+
+function workers = select_worker_count(requested, max_workers)
+% select_worker_count 对用户请求的 worker 数做安全裁剪
+%
+% 输入:
+%   requested   - 用户请求的 worker 数量
+%   max_workers - 系统最大可用 worker 数量
+%
+% 输出:
+%   workers - 实际使用的 worker 数量
+
+    if isempty(requested)
+        % 默认使用最大可用数量
+        workers = max_workers;
+    else
+        % 限制在合理范围内
+        workers = max(1, min(requested, max_workers));
     end
 end
