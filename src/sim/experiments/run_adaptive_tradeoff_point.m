@@ -7,7 +7,7 @@
 %
 % 使用方式：
 %   直接运行脚本。可根据需要调整噪声、粒子数、重复次数、
-%   以及自适应阈值策略参数（序参量门限、cj_low/cj_high 等）。
+%   以及自适应阈值策略参数（显著性方差阈值、cj_low/cj_high 等）。
 % =========================================================================
 
 clc;
@@ -49,10 +49,10 @@ pers_cfg.min_fit_points = 40;
 pers_cfg.min_diffusion = 1e-4;
 
 adaptive_cfg = struct();
-adaptive_cfg.cj_low = 0.4;
-adaptive_cfg.cj_high = 2.5;
-adaptive_cfg.order_threshold = 0.6;
-adaptive_cfg.include_self = true;
+adaptive_cfg.cj_low = 0.5;
+adaptive_cfg.cj_high = 5.0;
+adaptive_cfg.saliency_threshold = 0.03;
+adaptive_cfg.include_self = false;
 
 time_vec_resp = (0:resp_params.T_max)' * resp_params.dt;
 base_seed = 20250325;

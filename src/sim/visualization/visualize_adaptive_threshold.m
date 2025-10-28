@@ -1,8 +1,8 @@
 % visualize_adaptive_threshold 自适应阈值机制演示脚本
 % =========================================================================
 % 功能：
-%   - 启用局部序参量驱动的自适应运动显著性阈值，直接观察单次响应过程。
-%   - 左上显示粒子运动，右下同时绘制自适应阈值和局部序参量随时间的变化。
+%   - 启用邻域运动显著性方差驱动的自适应阈值，直接观察单次响应过程。
+%   - 左上显示粒子运动，右下同时绘制自适应阈值和显著性方差随时间的变化。
 %   - 结束后自动运行一次持久性测试，输出响应性 R 与持久性 P 的数值。
 %
 % 使用方式：
@@ -23,7 +23,7 @@ params.N = 200;
 params.rho = 1;
 params.v0 = 1;
 params.angleUpdateParameter = 10;
-params.angleNoiseIntensity = 0.1;
+params.angleNoiseIntensity = 0.05;
 params.T_max = 600;
 params.dt = 0.1;
 params.radius = 5;
@@ -39,8 +39,8 @@ params.useAdaptiveThreshold = true;
 adaptive_cfg = struct();
 adaptive_cfg.cj_low = 0.5;
 adaptive_cfg.cj_high = 5;
-adaptive_cfg.order_threshold = 0.965;
-adaptive_cfg.include_self = true;
+adaptive_cfg.saliency_threshold = 0.03;  % 邻域显著性方差阈值
+adaptive_cfg.include_self = false;
 params.adaptiveThresholdConfig = adaptive_cfg;
 
 pers_cfg = struct();
@@ -90,19 +90,19 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
     ax_threshold = subplot(2,1,2, 'Parent', fig);
     hold(ax_threshold, 'on');
     threshold_line = plot(ax_threshold, NaN, NaN, '-', 'LineWidth', 1.6, 'Color', [0.9 0.5 0.2]);
-    order_line = plot(ax_threshold, NaN, NaN, '--', 'LineWidth', 1.2, 'Color', [0.4 0.4 0.4]);
+    saliency_line = plot(ax_threshold, NaN, NaN, '--', 'LineWidth', 1.2, 'Color', [0.4 0.4 0.4]);
     hold(ax_threshold, 'off');
     xlabel(ax_threshold, '时间步');
-    ylabel(ax_threshold, '平均阈值 / 平均序参量');
-    legend(ax_threshold, {'阈值', '局部序参量'}, 'Location', 'best');
-    title(ax_threshold, '自适应阈值与局部序参量演化');
+    ylabel(ax_threshold, '平均阈值 / 显著性方差');
+    legend(ax_threshold, {'阈值', '显著性方差'}, 'Location', 'best');
+    title(ax_threshold, '自适应阈值与显著性方差演化');
     grid(ax_threshold, 'on');
 
     V_history = zeros(params.T_max + 1, 2);
     V_history(1, :) = compute_average_velocity(sim.theta, params.v0);
     projection_history = zeros(params.T_max + 1, num_angles);
     threshold_history = zeros(params.T_max + 1, 1);
-    order_history = zeros(params.T_max + 1, 1);
+    saliency_history = zeros(params.T_max + 1, 1);
 
     triggered = false;
     n_vectors = [];
@@ -113,7 +113,7 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
         V_history(t + 1, :) = compute_average_velocity(sim.theta, params.v0);
 
         threshold_history(t + 1) = mean(sim.cj_threshold_dynamic);
-        order_history(t + 1) = mean(sim.local_order_state);
+        saliency_history(t + 1) = mean(sim.local_saliency_state);
 
         if ~triggered && sim.external_pulse_triggered
             triggered = true;
@@ -141,7 +141,7 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
                 'UData', cos(sim.theta), 'VData', sin(sim.theta));
 
             set(threshold_line, 'XData', 0:t, 'YData', threshold_history(1:t+1));
-            set(order_line, 'XData', 0:t, 'YData', order_history(1:t+1));
+            set(saliency_line, 'XData', 0:t, 'YData', saliency_history(1:t+1));
 
             drawnow limitrate;
         end

@@ -40,6 +40,7 @@ classdef ParticleSimulation < handle
         adaptiveThresholdConfig = struct(); % 自适应阈值配置结构体
         cj_threshold_dynamic; % [N x 1] 实时阈值
         local_order_state; % [N x 1] 记录局部序参量
+        local_saliency_state; % [N x 1] 记录邻域运动显著性统计
 
         % 拓扑邻居选择参数
         use_topology = false; % 是否使用拓扑邻居选择（false: 基于半径, true: 基于拓扑）
@@ -97,6 +98,7 @@ classdef ParticleSimulation < handle
             else
                 obj.cj_threshold_dynamic = [];
                 obj.local_order_state = [];
+                obj.local_saliency_state = [];
             end
 
             % 场地大小设置
@@ -579,9 +581,18 @@ classdef ParticleSimulation < handle
             end
 
             if ~isfield(cfg, 'order_threshold') || ~isnumeric(cfg.order_threshold)
-                cfg.order_threshold = 0.8;
+                cfg.order_threshold = [];
             end
-            cfg.order_threshold = min(max(cfg.order_threshold, 0), 1);
+            if ~isempty(cfg.order_threshold)
+                cfg.order_threshold = min(max(cfg.order_threshold, 0), 1);
+            end
+
+            if ~isfield(cfg, 'saliency_threshold') || ~isnumeric(cfg.saliency_threshold)
+                cfg.saliency_threshold = [];
+            end
+            if ~isempty(cfg.saliency_threshold)
+                cfg.saliency_threshold = max(cfg.saliency_threshold, 0);
+            end
 
             if ~isfield(cfg, 'include_self') || ~islogical(cfg.include_self)
                 cfg.include_self = true;
@@ -594,6 +605,7 @@ classdef ParticleSimulation < handle
         % initializeAdaptiveThresholdState 初始化自适应阈值状态
             obj.cj_threshold_dynamic = ones(obj.N, 1) * obj.cj_threshold;
             obj.local_order_state = zeros(obj.N, 1);
+            obj.local_saliency_state = zeros(obj.N, 1);
         end
 
         function updateAdaptiveThresholds(obj, neighbor_matrix)
@@ -603,30 +615,83 @@ classdef ParticleSimulation < handle
                 obj.initializeAdaptiveThresholdState();
             end
 
-            thr = cfg.order_threshold;
+            use_order_metric = ~isempty(cfg.order_threshold);
+            use_saliency_metric = ~isempty(cfg.saliency_threshold);
+
+            if ~use_order_metric && ~use_saliency_metric
+                % 若未配置任何自适应指标，保持静态阈值
+                return;
+            end
+
+            order_thr = cfg.order_threshold;
+            saliency_thr = cfg.saliency_threshold;
+
             for i = 1:obj.N
                 neighbor_idx = find(neighbor_matrix(i, :));
-                if cfg.include_self
-                    angles = [obj.theta(i); obj.theta(neighbor_idx)];
-                else
-                    angles = obj.theta(neighbor_idx);
+                order_norm = 0;
+                saliency_var = 0;
+
+                if use_order_metric
+                    if cfg.include_self
+                        angles = [obj.theta(i); obj.theta(neighbor_idx)];
+                    else
+                        angles = obj.theta(neighbor_idx);
+                    end
+
+                    if isempty(angles)
+                        order_norm = 0;
+                    else
+                        vecs = [cos(angles), sin(angles)];
+                        mean_vec = mean(vecs, 1);
+                        order_norm = norm(mean_vec);
+                    end
+
+                    order_norm = min(max(order_norm, 0), 1);
+                    obj.local_order_state(i) = order_norm;
                 end
 
-                if isempty(angles)
-                    order_norm = 0;
-                else
-                    vecs = [cos(angles), sin(angles)];
-                    mean_vec = mean(vecs, 1);
-                    order_norm = norm(mean_vec);
+                if use_saliency_metric
+                    if isempty(neighbor_idx)
+                        saliency_var = 0;
+                    else
+                        current_diff = obj.positions(neighbor_idx, :) - obj.positions(i, :);
+                        past_diff = obj.previousPositions(neighbor_idx, :) - obj.previousPositions(i, :);
+
+                        current_dist = vecnorm(current_diff, 2, 2);
+                        past_dist = vecnorm(past_diff, 2, 2);
+
+                        current_diff_unit = zeros(size(current_diff));
+                        past_diff_unit = zeros(size(past_diff));
+
+                        non_zero_current = current_dist > 0;
+                        non_zero_past = past_dist > 0;
+
+                        current_diff_unit(non_zero_current, :) = current_diff(non_zero_current, :) ./ current_dist(non_zero_current);
+                        past_diff_unit(non_zero_past, :) = past_diff(non_zero_past, :) ./ past_dist(non_zero_past);
+
+                        angle_cos = sum(past_diff_unit .* current_diff_unit, 2);
+                        angle_cos = max(min(angle_cos, 1), -1);
+                        angle_diff_rad = acos(angle_cos);
+
+                        s_values = angle_diff_rad / max(obj.dt, eps);
+                        saliency_var = var(s_values, 1, 'omitnan');
+                    end
+
+                    obj.local_saliency_state(i) = saliency_var;
                 end
 
-                order_norm = min(max(order_norm, 0), 1);
-                obj.local_order_state(i) = order_norm;
-
-                if order_norm >= thr
-                    target_cj = cfg.cj_high;
+                if use_saliency_metric
+                    if saliency_var >= saliency_thr
+                        target_cj = cfg.cj_low;
+                    else
+                        target_cj = cfg.cj_high;
+                    end
                 else
-                    target_cj = cfg.cj_low;
+                    if order_norm >= order_thr
+                        target_cj = cfg.cj_high;
+                    else
+                        target_cj = cfg.cj_low;
+                    end
                 end
 
                 obj.cj_threshold_dynamic(i) = target_cj;
