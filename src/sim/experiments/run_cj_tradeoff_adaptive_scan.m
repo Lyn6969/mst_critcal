@@ -92,6 +92,35 @@ for mode_idx = 1:numel(modes)
         mean(mode_results.R_mean, 'omitnan'), mean(mode_results.P_mean, 'omitnan'));
 end
 
+%% 2.5 持久性归一化（全局 min-max） ----------------------------------------------
+mode_ids = fieldnames(results);
+P_all = [];
+for m = 1:numel(mode_ids)
+    raw_vals = results.(mode_ids{m}).P_raw;
+    P_all = [P_all; raw_vals(:)]; %#ok<AGROW>
+end
+P_all = P_all(~isnan(P_all));
+if isempty(P_all)
+    P_min = 0;
+    P_max = 1;
+else
+    P_min = min(P_all);
+    P_max = max(P_all);
+end
+P_range = max(P_max - P_min, eps);
+
+for m = 1:numel(mode_ids)
+    mode_key = mode_ids{m};
+    res = results.(mode_key);
+    res.P_mean_norm = (res.P_mean - P_min) / P_range;
+    res.P_std_norm = res.P_std / P_range;
+    res.P_sem_norm = res.P_sem / P_range;
+    res.P_raw_norm = (res.P_raw - P_min) / P_range;
+    results.(mode_key) = res;
+end
+
+fprintf('持久性归一化：min = %.4f, max = %.4f。\n\n', P_min, P_max);
+
 %% 3. 绘制对比权衡图 ------------------------------------------------------------
 results_dir = fullfile('results', 'tradeoff');
 if ~exist(results_dir, 'dir')
@@ -107,16 +136,16 @@ hold on;
 % 固定阈值散点（颜色表示阈值大小）
 fixed_data = results.fixed;
 fixed_cj = fixed_data.cj_thresholds;
-scatter(fixed_data.R_mean, fixed_data.P_mean, 70, fixed_cj, 'filled', 'DisplayName', '固定阈值');
+scatter(fixed_data.R_mean, fixed_data.P_mean_norm, 70, fixed_cj, 'filled', 'DisplayName', '固定阈值');
 colormap('turbo');
 cb = colorbar;
 cb.Label.String = '固定阈值大小';
-plot(fixed_data.R_mean, fixed_data.P_mean, '-', 'Color', [0.3 0.3 0.3], 'LineWidth', 1.2);
+plot(fixed_data.R_mean, fixed_data.P_mean_norm, '-', 'Color', [0.3 0.3 0.3], 'LineWidth', 1.2);
 
 % 自适应阈值结果（单点）
 adaptive_data = results.adaptive;
 adaptive_R = adaptive_data.R_mean;
-adaptive_P = adaptive_data.P_mean;
+adaptive_P = adaptive_data.P_mean_norm;
 adaptive_point = scatter(adaptive_R, adaptive_P, 160, [0.85 0.2 0.2], 'filled', ...
     'DisplayName', sprintf('自适应阈值 %.3f', adaptive_cfg.saliency_threshold));
 adaptive_point.Marker = 'p';
@@ -124,8 +153,8 @@ adaptive_point.MarkerEdgeColor = [0.5 0 0];
 adaptive_point.MarkerFaceColor = [0.85 0.2 0.2];
 
 xlabel('响应性 R');
-ylabel('持久性 P');
-title('固定阈值扫描 vs 自适应显著性阈值');
+ylabel('归一化持久性 P (min-max)');
+title('固定阈值扫描 vs 自适应显著性阈值（归一化）');
 legend('Location', 'best');
 grid on;
 
@@ -144,6 +173,9 @@ summary.num_runs = num_runs;
 summary.results = results;
 summary.matlab_version = version;
 summary.parallel_config = parallel_cfg;
+summary.P_min = P_min;
+summary.P_max = P_max;
+summary.P_range = P_range;
 
 save(output_mat, 'summary', '-v7.3');
 fprintf('数据已保存至: %s\n', output_mat);
@@ -172,43 +204,85 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
     fprintf('  -> 共扫描 %d 个阈值，每个重复 %d 次。\n', num_params, num_runs);
 
     total_timer = tic;
-    completed = 0;
-    start_time = tic;
+    progress_state = struct( ...
+        'total_tasks', num_params * num_runs, ...
+        'completed', 0, ...
+        'start_time', tic, ...
+        'last_report', tic, ...
+        'cj_thresholds', cj_thresholds, ...
+        'num_params', num_params, ...
+        'num_runs', num_runs);
 
     progress_queue = parallel.pool.DataQueue;
-    afterEach(progress_queue, @(idx) progress_callback(idx));
+    afterEach(progress_queue, @(info) progress_callback(info));
 
-    parfor param_idx = 1:num_params
-        current_cj = cj_thresholds(param_idx);
+    if num_params == 1
+        current_cj = cj_thresholds(1);
+        R_vec = NaN(num_runs, 1);
+        P_vec = NaN(num_runs, 1);
+        D_vec = NaN(num_runs, 1);
+        fail_vec = false(num_runs, 1);
 
-        resp_local = resp_params;
-        pers_local = pers_params;
-        resp_local.cj_threshold = current_cj;
-        pers_local.cj_threshold = current_cj;
+        parfor run_idx = 1:num_runs
+            resp_local = resp_params;
+            pers_local = pers_params;
+            resp_local.cj_threshold = current_cj;
+            pers_local.cj_threshold = current_cj;
 
-        local_R = NaN(1, num_runs);
-        local_P = NaN(1, num_runs);
-        local_D = NaN(1, num_runs);
-        local_fail = false(1, num_runs);
-
-        for run_idx = 1:num_runs
-            seed_base = base_seed + (param_idx - 1) * num_runs + run_idx;
+            seed_base = base_seed + run_idx;
 
             [R_value, triggered] = run_single_responsiveness_trial(resp_local, num_angles, time_vec_resp, seed_base);
-            local_R(run_idx) = R_value;
-            local_fail(run_idx) = (~triggered || isnan(R_value));
+            R_vec(run_idx) = R_value;
+            fail_vec(run_idx) = (~triggered || isnan(R_value));
 
             [P_value, D_value] = run_single_persistence_trial(pers_local, pers_cfg, seed_base + 10000);
-            local_P(run_idx) = P_value;
-            local_D(run_idx) = D_value;
+            P_vec(run_idx) = P_value;
+            D_vec(run_idx) = D_value;
+
+            progress_info.param_idx = 1;
+            progress_info.run_idx = run_idx;
+            send(progress_queue, progress_info);
         end
 
-        R_raw(param_idx, :) = local_R;
-        P_raw(param_idx, :) = local_P;
-        D_raw(param_idx, :) = local_D;
-        trigger_failures(param_idx) = sum(local_fail);
+        R_raw(1, :) = R_vec.';
+        P_raw(1, :) = P_vec.';
+        D_raw(1, :) = D_vec.';
+        trigger_failures(1) = sum(fail_vec);
+    else
+        parfor param_idx = 1:num_params
+            current_cj = cj_thresholds(param_idx);
 
-        send(progress_queue, param_idx);
+            resp_local = resp_params;
+            pers_local = pers_params;
+            resp_local.cj_threshold = current_cj;
+            pers_local.cj_threshold = current_cj;
+
+            local_R = NaN(1, num_runs);
+            local_P = NaN(1, num_runs);
+            local_D = NaN(1, num_runs);
+            local_fail = false(1, num_runs);
+
+            for run_idx = 1:num_runs
+                seed_base = base_seed + (param_idx - 1) * num_runs + run_idx;
+
+                [R_value, triggered] = run_single_responsiveness_trial(resp_local, num_angles, time_vec_resp, seed_base);
+                local_R(run_idx) = R_value;
+                local_fail(run_idx) = (~triggered || isnan(R_value));
+
+                [P_value, D_value] = run_single_persistence_trial(pers_local, pers_cfg, seed_base + 10000);
+                local_P(run_idx) = P_value;
+                local_D(run_idx) = D_value;
+
+                progress_info.param_idx = param_idx;
+                progress_info.run_idx = run_idx;
+                send(progress_queue, progress_info);
+            end
+
+            R_raw(param_idx, :) = local_R;
+            P_raw(param_idx, :) = local_P;
+            D_raw(param_idx, :) = local_D;
+            trigger_failures(param_idx) = sum(local_fail);
+        end
     end
 
     fprintf('  模式 [%s] 总耗时 %.1f 分钟\n', mode.id, toc(total_timer) / 60);
@@ -234,14 +308,20 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
         mode_results.saliency_threshold = mode.cfg.saliency_threshold;
     end
 
-    function progress_callback(param_idx_completed)
-        completed = completed + 1;
-        elapsed = toc(start_time);
-        avg_time = elapsed / completed;
-        remaining = avg_time * max(num_params - completed, 0);
-        fprintf('    [%.0f%%] (%d/%d) 阈值 %.3f 完成 | 已用 %.1f 分钟 | 预计剩余 %.1f 分钟\n', ...
-            100 * completed / num_params, completed, num_params, cj_thresholds(param_idx_completed), ...
-            elapsed / 60, remaining / 60);
+    function progress_callback(info)
+        progress_state.completed = progress_state.completed + 1;
+        elapsed = toc(progress_state.start_time);
+        avg_time = elapsed / progress_state.completed;
+        remaining = avg_time * max(progress_state.total_tasks - progress_state.completed, 0);
+
+        if toc(progress_state.last_report) >= 5 || progress_state.completed == progress_state.total_tasks
+            current_threshold = progress_state.cj_thresholds(info.param_idx);
+            fprintf('    [%.1f%%] (%d/%d runs) 当前阈值 %.3f | 已用 %.1f 分钟 | 预计剩余 %.1f 分钟\n', ...
+                100 * progress_state.completed / progress_state.total_tasks, ...
+                progress_state.completed, progress_state.total_tasks, current_threshold, ...
+                elapsed / 60, remaining / 60);
+            progress_state.last_report = tic;
+        end
     end
 end
 
