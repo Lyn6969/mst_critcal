@@ -71,6 +71,11 @@ modes = {
 time_vec_resp = (0:resp_params.T_max)' * resp_params.dt;
 base_seed = 20250315;
 
+parallel_cfg = struct();
+parallel_cfg.desired_workers = [];
+pool = configure_parallel_pool(parallel_cfg.desired_workers);
+fprintf('并行模式已启用：%d 个 workers\n\n', pool.NumWorkers);
+
 results = struct();
 
 %% 2. 依次运行两种机制 -----------------------------------------------------------
@@ -138,6 +143,7 @@ summary.cj_thresholds_fixed = cj_thresholds_fixed;
 summary.num_runs = num_runs;
 summary.results = results;
 summary.matlab_version = version;
+summary.parallel_config = parallel_cfg;
 
 save(output_mat, 'summary', '-v7.3');
 fprintf('数据已保存至: %s\n', output_mat);
@@ -164,41 +170,45 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
     trigger_failures = zeros(num_params, 1);
 
     fprintf('  -> 共扫描 %d 个阈值，每个重复 %d 次。\n', num_params, num_runs);
-    progressCounter = 0;
-    dq = parallel.pool.DataQueue;
-    afterEach(dq, @(idx) notifyProgress(idx));
 
     total_timer = tic;
-    for param_idx = 1:num_params
-        current_cj = cj_thresholds(param_idx);
-        R_tmp = NaN(1, num_runs);
-        P_tmp = NaN(1, num_runs);
-        D_tmp = NaN(1, num_runs);
-        trigger_tmp = false(1, num_runs);
+    completed = 0;
+    start_time = tic;
 
-        parfor run_idx = 1:num_runs
+    progress_queue = parallel.pool.DataQueue;
+    afterEach(progress_queue, @(idx) progress_callback(idx));
+
+    parfor param_idx = 1:num_params
+        current_cj = cj_thresholds(param_idx);
+
+        resp_local = resp_params;
+        pers_local = pers_params;
+        resp_local.cj_threshold = current_cj;
+        pers_local.cj_threshold = current_cj;
+
+        local_R = NaN(1, num_runs);
+        local_P = NaN(1, num_runs);
+        local_D = NaN(1, num_runs);
+        local_fail = false(1, num_runs);
+
+        for run_idx = 1:num_runs
             seed_base = base_seed + (param_idx - 1) * num_runs + run_idx;
 
-            resp_local = resp_params;
-            pers_local = pers_params;
-            resp_local.cj_threshold = current_cj;
-            pers_local.cj_threshold = current_cj;
-
             [R_value, triggered] = run_single_responsiveness_trial(resp_local, num_angles, time_vec_resp, seed_base);
-            R_tmp(run_idx) = R_value;
-            trigger_tmp(run_idx) = (~triggered || isnan(R_value));
+            local_R(run_idx) = R_value;
+            local_fail(run_idx) = (~triggered || isnan(R_value));
 
             [P_value, D_value] = run_single_persistence_trial(pers_local, pers_cfg, seed_base + 10000);
-            P_tmp(run_idx) = P_value;
-            D_tmp(run_idx) = D_value;
+            local_P(run_idx) = P_value;
+            local_D(run_idx) = D_value;
         end
 
-        R_raw(param_idx, :) = R_tmp;
-        P_raw(param_idx, :) = P_tmp;
-        D_raw(param_idx, :) = D_tmp;
-        trigger_failures(param_idx) = sum(trigger_tmp);
+        R_raw(param_idx, :) = local_R;
+        P_raw(param_idx, :) = local_P;
+        D_raw(param_idx, :) = local_D;
+        trigger_failures(param_idx) = sum(local_fail);
 
-        send(dq, param_idx);
+        send(progress_queue, param_idx);
     end
 
     fprintf('  模式 [%s] 总耗时 %.1f 分钟\n', mode.id, toc(total_timer) / 60);
@@ -224,9 +234,28 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
         mode_results.saliency_threshold = mode.cfg.saliency_threshold;
     end
 
-    function notifyProgress(idx)
-        progressCounter = progressCounter + 1;
-        fprintf('    [%2d/%2d] 阈值 %.3f 完成\n', progressCounter, num_params, cj_thresholds(idx));
+    function progress_callback(param_idx_completed)
+        completed = completed + 1;
+        elapsed = toc(start_time);
+        avg_time = elapsed / completed;
+        remaining = avg_time * max(num_params - completed, 0);
+        fprintf('    [%.0f%%] (%d/%d) 阈值 %.3f 完成 | 已用 %.1f 分钟 | 预计剩余 %.1f 分钟\n', ...
+            100 * completed / num_params, completed, num_params, cj_thresholds(param_idx_completed), ...
+            elapsed / 60, remaining / 60);
+    end
+end
+
+function pool = configure_parallel_pool(desired_workers)
+    pool = gcp('nocreate');
+    if isempty(pool)
+        if isempty(desired_workers)
+            pool = parpool;
+        else
+            pool = parpool(desired_workers);
+        end
+    elseif ~isempty(desired_workers) && pool.NumWorkers ~= desired_workers
+        delete(pool);
+        pool = parpool(desired_workers);
     end
 end
 
