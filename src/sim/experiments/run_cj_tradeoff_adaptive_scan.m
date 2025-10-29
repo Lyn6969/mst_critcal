@@ -239,8 +239,7 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
             P_vec(run_idx) = P_value;
             D_vec(run_idx) = D_value;
 
-            progress_info.param_idx = 1;
-            progress_info.run_idx = run_idx;
+            progress_info = struct('param_idx', 1, 'run_idx', run_idx);
             send(progress_queue, progress_info);
         end
 
@@ -273,8 +272,7 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
                 local_P(run_idx) = P_value;
                 local_D(run_idx) = D_value;
 
-                progress_info.param_idx = param_idx;
-                progress_info.run_idx = run_idx;
+                progress_info = struct('param_idx', param_idx, 'run_idx', run_idx);
                 send(progress_queue, progress_info);
             end
 
