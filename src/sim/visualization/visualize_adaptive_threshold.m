@@ -2,8 +2,8 @@
 % =========================================================================
 % 功能：
 %   - 启用邻域运动显著性方差驱动的自适应阈值，直接观察单次响应过程。
-%   - 左上显示粒子运动，右下同时绘制自适应阈值和显著性方差随时间的变化。
-%   - 结束后自动运行一次持久性测试，输出响应性 R 与持久性 P 的数值。
+%   - 响应性部分：展示外源触发下的粒子动态、阈值与显著性方差演化曲线。
+%   - 持久性部分：展示粒子群质心轨迹与 MSD 拟合过程，直观理解 P 的计算。
 %
 % 使用方式：
 %   直接运行本脚本即可。如需调节噪声、阈值上下限或序参量阈值，在脚本顶部修改参数。
@@ -39,8 +39,8 @@ params.useAdaptiveThreshold = true;
 adaptive_cfg = struct();
 adaptive_cfg.cj_low = 0.5;
 adaptive_cfg.cj_high = 5;
-adaptive_cfg.saliency_threshold = 0.03;  % 邻域显著性方差阈值
-adaptive_cfg.include_self = false;
+adaptive_cfg.saliency_threshold = 0.031;  % 邻域显著性方差阈值
+adaptive_cfg.include_self = true;
 params.adaptiveThresholdConfig = adaptive_cfg;
 
 pers_cfg = struct();
@@ -49,7 +49,7 @@ pers_cfg.min_fit_points = 40;
 pers_cfg.min_diffusion = 1e-4;
 
 num_angles = 1;         % 仅沿领导方向计算 r(phi)
-base_seed = 20250326;   % 用固定种子保证可复现
+base_seed = 20250319;   % 用固定种子保证可复现
 
 time_vec = (0:params.T_max)' * params.dt;
 
@@ -61,8 +61,8 @@ fprintf('响应性 R = %.3f\n', result.R_value);
 
 %% 3. 持久性测量 ---------------------------------------------------------------
 rng(base_seed + 12345);
-[P_value, D_value] = run_single_persistence(params, pers_cfg);
-fprintf('持久性 P = %.3f (扩散系数 %.3e)\n', P_value, D_value);
+pers_result = run_visual_persistence(params, pers_cfg);
+fprintf('持久性 P = %.3f (扩散系数 %.3e)\n', pers_result.P_value, pers_result.D_value);
 
 %% -------------------------------------------------------------------------------
 function result = run_visual_responsiveness(params, num_angles, time_vec)
@@ -173,7 +173,7 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
     result.R_value = R_val;
 end
 
-function [P_value, D_value] = run_single_persistence(params, cfg)
+function result = run_visual_persistence(params, cfg)
     params_pers = params;
     remove_fields = {'stabilization_steps', 'forced_turn_duration'};
     for k = 1:numel(remove_fields)
@@ -188,9 +188,114 @@ function [P_value, D_value] = run_single_persistence(params, cfg)
     dt = sim.dt;
     burn_in_index = max(2, floor((T + 1) * cfg.burn_in_ratio));
 
-    init_pos = sim.positions;
-    centroid0 = mean(init_pos, 1);
-    offsets0 = init_pos - centroid0;
+    initial_positions = sim.positions;
+    centroid0 = mean(initial_positions, 1);
+    offsets0 = initial_positions - centroid0;
+
+    centroids = zeros(T + 1, 2);
+    centroids(1, :) = centroid0;
+
+    msd_history = zeros(T + 1, 1);
+    msd_history(1) = 0;
+    time_vec = (0:T)' * dt;
+
+    fig = figure('Name', '自适应阈值持久性演示', 'Color', 'white', 'Position', [840, 120, 720, 620]);
+
+    ax_particles = subplot(2,1,1, 'Parent', fig);
+    scatter_plot = scatter(ax_particles, sim.positions(:,1), sim.positions(:,2), 36, 'filled');
+    hold(ax_particles, 'on');
+    quiver_plot = quiver(ax_particles, sim.positions(:,1), sim.positions(:,2), cos(sim.theta), sin(sim.theta), 0.35, ...
+        'Color', [0.3 0.3 0.3 0.5]);
+    centroid_trace = plot(ax_particles, centroids(1,1), centroids(1,2), '-', 'Color', [0.2 0.4 0.8], 'LineWidth', 1.2);
+    hold(ax_particles, 'off');
+    axis(ax_particles, [0 params.fieldSize 0 params.fieldSize]);
+    axis(ax_particles, 'square');
+    grid(ax_particles, 'on');
+    xlabel(ax_particles, 'X');
+    ylabel(ax_particles, 'Y');
+    title(ax_particles, '粒子状态与质心轨迹');
+
+    ax_msd = subplot(2,1,2, 'Parent', fig);
+    msd_line = plot(ax_msd, time_vec, msd_history, '-', 'LineWidth', 1.4, 'Color', [0.4 0.4 0.4]);
+    hold(ax_msd, 'on');
+    fit_line = plot(ax_msd, NaN, NaN, '--', 'LineWidth', 1.6, 'Color', [0.85 0.2 0.2]);
+    burn_in_line = xline(ax_msd, time_vec(burn_in_index), ':', 'Color', [0.2 0.2 0.2], 'Label', '烧入区间');
+    hold(ax_msd, 'off');
+    grid(ax_msd, 'on');
+    xlabel(ax_msd, '时间 (s)');
+    ylabel(ax_msd, 'MSD');
+    title(ax_msd, '平均平方位移随时间演化');
+
+    for step_idx = 1:T
+        sim.step();
+        positions = sim.positions;
+        centroid = mean(positions, 1);
+        centroids(step_idx + 1, :) = centroid;
+
+        centered = positions - centroid;
+        rel_disp = centered - offsets0;
+        msd_history(step_idx + 1) = mean(sum(rel_disp.^2, 2), 'omitnan');
+
+        if mod(step_idx, 5) == 0 || step_idx == T
+            colors = repmat([0.7 0.7 0.7], params.N, 1);
+            if any(sim.isActive)
+                colors(sim.isActive, :) = repmat([0.9 0.3 0.3], sum(sim.isActive), 1);
+            end
+
+            set(scatter_plot, 'XData', positions(:,1), 'YData', positions(:,2), 'CData', colors);
+            set(quiver_plot, 'XData', positions(:,1), 'YData', positions(:,2), ...
+                'UData', cos(sim.theta), 'VData', sin(sim.theta));
+            set(centroid_trace, 'XData', centroids(1:step_idx+1,1), 'YData', centroids(1:step_idx+1,2));
+
+            set(msd_line, 'YData', msd_history);
+            drawnow limitrate;
+        end
+    end
+
+    [P_value, D_value, fit_time, fit_curve] = compute_persistence_metrics(time_vec, msd_history, burn_in_index, cfg);
+    set(fit_line, 'XData', fit_time, 'YData', fit_curve);
+    if ~isempty(burn_in_line)
+        burn_in_line.Value = time_vec(burn_in_index);
+    end
+    title(ax_msd, sprintf('平均平方位移 (P = %.3f, D = %.3e)', P_value, D_value));
+
+    scatter(ax_particles, centroids(1,1), centroids(1,2), 60, [0.3 0.7 0.3], 'filled', 'DisplayName', '初始质心');
+    scatter(ax_particles, centroids(end,1), centroids(end,2), 70, [0.9 0.3 0.3], 'filled', 'DisplayName', '结束质心');
+    legend(ax_particles, {'粒子位置', '方向', '质心轨迹', '初始质心', '结束质心'}, 'Location', 'bestoutside');
+
+    result = struct();
+    result.P_value = P_value;
+    result.D_value = D_value;
+    result.figure = fig;
+end
+
+function [P_value, D_value] = run_single_persistence(params, cfg)
+    data = simulate_persistence_series(params, cfg);
+    P_value = data.P_value;
+    D_value = data.D_value;
+end
+
+function data = simulate_persistence_series(params, cfg)
+    params_pers = params;
+    remove_fields = {'stabilization_steps', 'forced_turn_duration'};
+    for k = 1:numel(remove_fields)
+        if isfield(params_pers, remove_fields{k})
+            params_pers = rmfield(params_pers, remove_fields{k});
+        end
+    end
+
+    sim = ParticleSimulation(params_pers);
+
+    T = sim.T_max;
+    dt = sim.dt;
+    burn_in_index = max(2, floor((T + 1) * cfg.burn_in_ratio));
+
+    initial_positions = sim.positions;
+    centroid0 = mean(initial_positions, 1);
+    offsets0 = initial_positions - centroid0;
+
+    centroids = zeros(T + 1, 2);
+    centroids(1, :) = centroid0;
 
     msd = zeros(T + 1, 1);
     msd(1) = 0;
@@ -199,6 +304,8 @@ function [P_value, D_value] = run_single_persistence(params, cfg)
         sim.step();
         positions = sim.positions;
         centroid = mean(positions, 1);
+        centroids(step_idx + 1, :) = centroid;
+
         centered = positions - centroid;
         rel_disp = centered - offsets0;
         msd(step_idx + 1) = mean(sum(rel_disp.^2, 2), 'omitnan');
@@ -208,9 +315,32 @@ function [P_value, D_value] = run_single_persistence(params, cfg)
     x = time_vec(burn_in_index:end);
     y = msd(burn_in_index:end);
 
-    if numel(x) < max(2, cfg.min_fit_points) || all(abs(y - y(1)) < eps)
-        D_value = NaN;
-    else
+    [P_value, D_value, fit_time, fit_curve] = compute_persistence_metrics(time_vec, msd, burn_in_index, cfg);
+
+    data = struct();
+    data.centroids = centroids;
+    data.time_vec = time_vec;
+    data.msd = msd;
+    data.fit_time = fit_time;
+    data.fit_curve = fit_curve;
+    data.burn_in_index = burn_in_index;
+    data.P_value = P_value;
+    data.D_value = D_value;
+end
+
+function V = compute_average_velocity(theta, v0)
+    V = [mean(v0 * cos(theta)), mean(v0 * sin(theta))];
+end
+
+function [P_value, D_value, fit_time, fit_curve] = compute_persistence_metrics(time_vec, msd, burn_in_index, cfg)
+    x = time_vec(burn_in_index:end);
+    y = msd(burn_in_index:end);
+
+    D_value = NaN;
+    fit_time = x;
+    fit_curve = NaN(size(x));
+
+    if numel(x) >= max(2, cfg.min_fit_points) && ~all(abs(y - y(1)) < eps)
         x_shift = x - x(1);
         y_shift = y - y(1);
         if any(x_shift > 0) && any(abs(y_shift) > eps)
@@ -219,24 +349,18 @@ function [P_value, D_value] = run_single_persistence(params, cfg)
                 y_shift = smoothdata(y_shift, 'movmean', smooth_window);
             end
             slope = lsqnonneg(x_shift(:), y_shift(:));
-            if slope <= 0
-                D_value = NaN;
-            else
+            if slope > 0
                 D_value = slope;
+                fit_curve = y(1) + slope * x_shift;
             end
-        else
-            D_value = NaN;
         end
     end
 
     if isnan(D_value)
         P_value = NaN;
+        fit_curve(:) = NaN;
     else
         D_value = max(D_value, cfg.min_diffusion);
         P_value = 1 / sqrt(D_value);
     end
-end
-
-function V = compute_average_velocity(theta, v0)
-    V = [mean(v0 * cos(theta)), mean(v0 * sin(theta))];
 end

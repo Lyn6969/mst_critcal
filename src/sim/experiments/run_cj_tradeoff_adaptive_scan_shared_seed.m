@@ -1,17 +1,15 @@
-% run_cj_tradeoff_adaptive_scan
+% run_cj_tradeoff_adaptive_scan_shared_seed
 % =========================================================================
 % 目的：
-%   - 在固定噪声场景下比较“固定运动显著性阈值”扫描与“自适应显著性阈值”
-%     两种机制的响应性 R 与持久性 P 的权衡关系。
-%   - 自适应机制采用邻域运动显著性方差作为触发指标，与
-%     visualize_adaptive_threshold 中保持一致 (adaptive_cfg.saliency_threshold)。
+%   - 对比“固定阈值扫描”与“自适应显著性阈值”在共享随机环境下的 R-P 权衡。
+%   - 通过为所有阈值复用同一组随机种子，使差异主要来源于阈值机制本身。
 %
 % 输出：
-%   - results/tradeoff/ 下的 MAT 文件，包含两种机制的原始数据与统计量
-%   - 对比权衡图 (PNG)，展示两条 R-P 曲线
+%   - 控制台进度提示
+%   - results/tradeoff/ 目录下的 MAT 数据与 R-P 图像
 %
 % 使用方式：
-%   直接运行本脚本即可。可根据需要调整扫描范围、噪声强度和自适应参数。
+%   直接运行脚本。
 % =========================================================================
 
 clc;
@@ -20,9 +18,8 @@ close all;
 
 addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 
-%% 1. 公共仿真参数 ---------------------------------------------------------------
 fprintf('=================================================\n');
-fprintf('   固定阈值 vs 自适应阈值：响应性-持久性权衡\n');
+fprintf('   固定阈值 vs 自适应阈值（共享随机环境）\n');
 fprintf('=================================================\n\n');
 
 base_common = struct();
@@ -30,7 +27,7 @@ base_common.N = 200;
 base_common.rho = 1;
 base_common.v0 = 1;
 base_common.angleUpdateParameter = 10;
-base_common.angleNoiseIntensity = 0.05; % 固定噪声水平
+base_common.angleNoiseIntensity = 0.05;
 base_common.T_max = 600;
 base_common.dt = 0.1;
 base_common.radius = 5;
@@ -48,8 +45,9 @@ pers_params = base_common;
 pers_params.T_max = 600;
 
 cj_thresholds_fixed = 0.0:0.1:5.0;
-num_runs = 100;
+num_runs = 200;
 num_angles = 1;
+
 pers_cfg = struct();
 pers_cfg.burn_in_ratio = 0.25;
 pers_cfg.min_diffusion = 1e-4;
@@ -65,11 +63,12 @@ modes = {
     struct('id', 'fixed', 'label', '固定阈值扫描', 'useAdaptive', false, ...
            'cfg', [], 'cj_thresholds', cj_thresholds_fixed), ...
     struct('id', 'adaptive', 'label', '自适应阈值', 'useAdaptive', true, ...
-           'cfg', adaptive_cfg, 'cj_thresholds', resp_params.cj_threshold)
+           'cfg', adaptive_cfg, 'cj_thresholds', 1) % 占位
 };
 
 time_vec_resp = (0:resp_params.T_max)' * resp_params.dt;
 base_seed = 20250314;
+shared_seeds = base_seed + (0:num_runs-1);
 
 parallel_cfg = struct();
 parallel_cfg.desired_workers = [];
@@ -78,92 +77,91 @@ fprintf('并行模式已启用：%d 个 workers\n\n', pool.NumWorkers);
 
 results = struct();
 
-%% 2. 依次运行两种机制 -----------------------------------------------------------
 for mode_idx = 1:numel(modes)
     mode = modes{mode_idx};
     fprintf('[%s] 模式：%s\n', mode.id, mode.label);
 
-    mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
-        num_runs, num_angles, pers_cfg, time_vec_resp, base_seed);
+    if mode.useAdaptive
+        resp_params.useAdaptiveThreshold = true;
+        resp_params.adaptiveThresholdConfig = mode.cfg;
+        pers_params.useAdaptiveThreshold = true;
+        pers_params.adaptiveThresholdConfig = mode.cfg;
+        cj_list = 1; % 仅占位
+    else
+        resp_params.useAdaptiveThreshold = false;
+        pers_params.useAdaptiveThreshold = false;
+        cj_list = cj_thresholds_fixed;
+    end
+
+    mode_results = run_tradeoff_mode_shared(resp_params, pers_params, cj_list, mode.useAdaptive, ...
+        adaptive_cfg, num_runs, num_angles, pers_cfg, time_vec_resp, shared_seeds);
 
     results.(mode.id) = mode_results;
-
     fprintf('  完成：平均 R = %.3f, 平均 P = %.3f\n\n', ...
         mean(mode_results.R_mean, 'omitnan'), mean(mode_results.P_mean, 'omitnan'));
 end
 
-%% 2.5 持久性归一化（全局 min-max） ----------------------------------------------
+%% 归一化持久性（使用固定 + 自适应所有样本）
+all_P = [];
 mode_ids = fieldnames(results);
-P_all = [];
-for m = 1:numel(mode_ids)
-    raw_vals = results.(mode_ids{m}).P_raw;
-    P_all = [P_all; raw_vals(:)]; %#ok<AGROW>
+for k = 1:numel(mode_ids)
+    all_P = [all_P; results.(mode_ids{k}).P_raw(:)]; %#ok<AGROW>
 end
-P_all = P_all(~isnan(P_all));
-if isempty(P_all)
-    P_min = 0;
-    P_max = 1;
+all_P = all_P(~isnan(all_P));
+if isempty(all_P)
+    P_min = 0; P_max = 1;
 else
-    P_min = min(P_all);
-    P_max = max(P_all);
+    P_min = min(all_P);
+    P_max = max(all_P);
 end
 P_range = max(P_max - P_min, eps);
 
-for m = 1:numel(mode_ids)
-    mode_key = mode_ids{m};
-    res = results.(mode_key);
+for k = 1:numel(mode_ids)
+    key = mode_ids{k};
+    res = results.(key);
     res.P_mean_norm = (res.P_mean - P_min) / P_range;
     res.P_std_norm = res.P_std / P_range;
     res.P_sem_norm = res.P_sem / P_range;
     res.P_raw_norm = (res.P_raw - P_min) / P_range;
-    results.(mode_key) = res;
+    results.(key) = res;
 end
+fprintf('持久性归一化：min = %.4f, max = %.4f\n\n', P_min, P_max);
 
-fprintf('持久性归一化：min = %.4f, max = %.4f。\n\n', P_min, P_max);
-
-%% 3. 绘制对比权衡图 ------------------------------------------------------------
+%% 绘制
 results_dir = fullfile('results', 'tradeoff');
 if ~exist(results_dir, 'dir')
     mkdir(results_dir);
 end
 timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
-output_mat = fullfile(results_dir, sprintf('cj_tradeoff_adaptive_%s.mat', timestamp));
-output_fig = fullfile(results_dir, sprintf('cj_tradeoff_adaptive_%s.png', timestamp));
+output_mat = fullfile(results_dir, sprintf('cj_tradeoff_adaptive_shared_seed_%s.mat', timestamp));
+output_fig = fullfile(results_dir, sprintf('cj_tradeoff_adaptive_shared_seed_%s.png', timestamp));
 
-figure('Name', '固定 vs 自适应阈值权衡', 'Color', 'white', 'Position', [160, 120, 960, 600]);
+figure('Name', '固定 vs 自适应阈值（共享随机环境）', 'Color', 'white', 'Position', [160, 120, 960, 600]);
 hold on;
 
-% 固定阈值散点（颜色表示阈值大小）
 fixed_data = results.fixed;
-fixed_cj = fixed_data.cj_thresholds;
-scatter(fixed_data.R_mean, fixed_data.P_mean_norm, 70, fixed_cj, 'filled', 'DisplayName', '固定阈值');
+scatter(fixed_data.R_mean, fixed_data.P_mean_norm, 70, cj_thresholds_fixed, 'filled', 'DisplayName', '固定阈值');
 colormap('turbo');
 cb = colorbar;
-cb.Label.String = '固定阈值大小';
+cb.Label.String = '固定阈值';
 plot(fixed_data.R_mean, fixed_data.P_mean_norm, '-', 'Color', [0.3 0.3 0.3], 'LineWidth', 1.2);
 
-% 自适应阈值结果（单点）
 adaptive_data = results.adaptive;
-adaptive_R = adaptive_data.R_mean;
-adaptive_P = adaptive_data.P_mean_norm;
-adaptive_point = scatter(adaptive_R, adaptive_P, 160, [0.85 0.2 0.2], 'filled', ...
-    'DisplayName', sprintf('自适应阈值 %.3f', adaptive_cfg.saliency_threshold));
-adaptive_point.Marker = 'p';
-adaptive_point.MarkerEdgeColor = [0.5 0 0];
-adaptive_point.MarkerFaceColor = [0.85 0.2 0.2];
+scatter(adaptive_data.R_mean, adaptive_data.P_mean_norm, 160, [0.85 0.2 0.2], 'filled', ...
+    'DisplayName', sprintf('自适应阈值 %.3f', adaptive_cfg.saliency_threshold), 'Marker', 'p', ...
+    'MarkerEdgeColor', [0.5 0 0], 'MarkerFaceColor', [0.85 0.2 0.2]);
 
 xlabel('响应性 R');
 ylabel('归一化持久性 P (min-max)');
-title('固定阈值扫描 vs 自适应显著性阈值（归一化）');
+title('固定阈值扫描 vs 自适应显著性阈值（共享随机环境）');
 legend('Location', 'best');
 grid on;
 
 saveas(gcf, output_fig);
 fprintf('图像已保存至: %s\n', output_fig);
 
-%% 4. 保存数据 --------------------------------------------------------------------
 summary = struct();
-summary.description = 'Fixed threshold scan vs adaptive saliency-threshold trade-off';
+summary.description = 'Fixed vs adaptive threshold trade-off (shared seeds)';
 summary.timestamp = timestamp;
 summary.base_params_resp = resp_params;
 summary.base_params_pers = pers_params;
@@ -171,50 +169,44 @@ summary.adaptive_config = adaptive_cfg;
 summary.cj_thresholds_fixed = cj_thresholds_fixed;
 summary.num_runs = num_runs;
 summary.results = results;
-summary.matlab_version = version;
-summary.parallel_config = parallel_cfg;
+summary.shared_seeds = shared_seeds;
 summary.P_min = P_min;
 summary.P_max = P_max;
 summary.P_range = P_range;
+summary.matlab_version = version;
+summary.base_seed = base_seed;
 
 save(output_mat, 'summary', '-v7.3');
 fprintf('数据已保存至: %s\n', output_mat);
 
 %% -------------------------------------------------------------------------------
-function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
-    num_runs, num_angles, pers_cfg, time_vec_resp, base_seed)
+function mode_results = run_tradeoff_mode_shared(resp_params, pers_params, cj_thresholds, ...
+    useAdaptive, adaptive_cfg, num_runs, num_angles, pers_cfg, time_vec_resp, shared_seeds)
 
-    if mode.useAdaptive
+    if useAdaptive
         resp_params.useAdaptiveThreshold = true;
-        resp_params.adaptiveThresholdConfig = mode.cfg;
+        resp_params.adaptiveThresholdConfig = adaptive_cfg;
         pers_params.useAdaptiveThreshold = true;
-        pers_params.adaptiveThresholdConfig = mode.cfg;
+        pers_params.adaptiveThresholdConfig = adaptive_cfg;
     else
         resp_params.useAdaptiveThreshold = false;
         pers_params.useAdaptiveThreshold = false;
     end
 
-    cj_thresholds = mode.cj_thresholds;
     num_params = numel(cj_thresholds);
     R_raw = NaN(num_params, num_runs);
     P_raw = NaN(num_params, num_runs);
     D_raw = NaN(num_params, num_runs);
     trigger_failures = zeros(num_params, 1);
 
-    fprintf('  -> 共扫描 %d 个阈值，每个重复 %d 次。\n', num_params, num_runs);
+    progress.total_tasks = num_params * num_runs;
+    progress.completed = 0;
+    progress.start_time = tic;
+    progress.last_report = tic;
+    progress.cj_thresholds = cj_thresholds;
 
-    total_timer = tic;
-    progress_state = struct( ...
-        'total_tasks', num_params * num_runs, ...
-        'completed', 0, ...
-        'start_time', tic, ...
-        'last_report', tic, ...
-        'cj_thresholds', cj_thresholds, ...
-        'num_params', num_params, ...
-        'num_runs', num_runs);
-
-    progress_queue = parallel.pool.DataQueue;
-    afterEach(progress_queue, @(info) progress_callback(info));
+    dq = parallel.pool.DataQueue;
+    afterEach(dq, @(info) report_progress(info));
 
     if num_params == 1
         current_cj = cj_thresholds(1);
@@ -224,23 +216,21 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
         fail_vec = false(num_runs, 1);
 
         parfor run_idx = 1:num_runs
+            seed_base = shared_seeds(run_idx);
             resp_local = resp_params;
             pers_local = pers_params;
             resp_local.cj_threshold = current_cj;
             pers_local.cj_threshold = current_cj;
 
-            seed_base = base_seed + run_idx;
+            [R_val, triggered] = run_single_responsiveness_trial(resp_local, num_angles, time_vec_resp, seed_base);
+            [P_val, D_val] = run_single_persistence_trial(pers_local, pers_cfg, seed_base + 10000);
 
-            [R_value, triggered] = run_single_responsiveness_trial(resp_local, num_angles, time_vec_resp, seed_base);
-            R_vec(run_idx) = R_value;
-            fail_vec(run_idx) = (~triggered || isnan(R_value));
+            R_vec(run_idx) = R_val;
+            P_vec(run_idx) = P_val;
+            D_vec(run_idx) = D_val;
+            fail_vec(run_idx) = (~triggered || isnan(R_val));
 
-            [P_value, D_value] = run_single_persistence_trial(pers_local, pers_cfg, seed_base + 10000);
-            P_vec(run_idx) = P_value;
-            D_vec(run_idx) = D_value;
-
-            progress_info = struct('param_idx', 1, 'run_idx', run_idx);
-            send(progress_queue, progress_info);
+            send(dq, struct('param_idx', 1, 'run_idx', run_idx));
         end
 
         R_raw(1, :) = R_vec.';
@@ -250,7 +240,6 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
     else
         parfor param_idx = 1:num_params
             current_cj = cj_thresholds(param_idx);
-
             resp_local = resp_params;
             pers_local = pers_params;
             resp_local.cj_threshold = current_cj;
@@ -262,18 +251,17 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
             local_fail = false(1, num_runs);
 
             for run_idx = 1:num_runs
-                seed_base = base_seed + (param_idx - 1) * num_runs + run_idx;
+                seed_base = shared_seeds(run_idx);
 
-                [R_value, triggered] = run_single_responsiveness_trial(resp_local, num_angles, time_vec_resp, seed_base);
-                local_R(run_idx) = R_value;
-                local_fail(run_idx) = (~triggered || isnan(R_value));
+                [R_val, triggered] = run_single_responsiveness_trial(resp_local, num_angles, time_vec_resp, seed_base);
+                [P_val, D_val] = run_single_persistence_trial(pers_local, pers_cfg, seed_base + 10000);
 
-                [P_value, D_value] = run_single_persistence_trial(pers_local, pers_cfg, seed_base + 10000);
-                local_P(run_idx) = P_value;
-                local_D(run_idx) = D_value;
+                local_R(run_idx) = R_val;
+                local_P(run_idx) = P_val;
+                local_D(run_idx) = D_val;
+                local_fail(run_idx) = (~triggered || isnan(R_val));
 
-                progress_info = struct('param_idx', param_idx, 'run_idx', run_idx);
-                send(progress_queue, progress_info);
+                send(dq, struct('param_idx', param_idx, 'run_idx', run_idx));
             end
 
             R_raw(param_idx, :) = local_R;
@@ -283,10 +271,7 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
         end
     end
 
-    fprintf('  模式 [%s] 总耗时 %.1f 分钟\n', mode.id, toc(total_timer) / 60);
-
     mode_results = struct();
-    mode_results.mode = mode;
     mode_results.R_raw = R_raw;
     mode_results.P_raw = P_raw;
     mode_results.D_raw = D_raw;
@@ -302,24 +287,23 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
 
     mode_results.D_mean = mean(D_raw, 2, 'omitnan');
     mode_results.cj_thresholds = cj_thresholds(:);
-    if mode.useAdaptive && isfield(mode.cfg, 'saliency_threshold')
-        mode_results.saliency_threshold = mode.cfg.saliency_threshold;
+    if useAdaptive
+        mode_results.saliency_threshold = adaptive_cfg.saliency_threshold;
     end
 
-    function progress_callback(info)
-        progress_state.completed = progress_state.completed + 1;
-        elapsed = toc(progress_state.start_time);
-        avg_time = elapsed / progress_state.completed;
-        remaining = avg_time * max(progress_state.total_tasks - progress_state.completed, 0);
-
-        if toc(progress_state.last_report) >= 5 || progress_state.completed == progress_state.total_tasks
-            current_threshold = progress_state.cj_thresholds(info.param_idx);
-            fprintf('    [%.1f%%] (%d/%d runs) 当前阈值 %.3f | 已用 %.1f 分钟 | 预计剩余 %.1f 分钟\n', ...
-                100 * progress_state.completed / progress_state.total_tasks, ...
-                progress_state.completed, progress_state.total_tasks, current_threshold, ...
-                elapsed / 60, remaining / 60);
-            progress_state.last_report = tic;
+    function report_progress(info)
+        progress.completed = progress.completed + 1;
+        if toc(progress.last_report) < 5 && progress.completed < progress.total_tasks
+            return;
         end
+        elapsed = toc(progress.start_time);
+        avg_time = elapsed / progress.completed;
+        remaining = avg_time * max(progress.total_tasks - progress.completed, 0);
+        current_thr = progress.cj_thresholds(min(info.param_idx, numel(progress.cj_thresholds)));
+        fprintf('    [%.1f%%] (%d/%d runs) 当前阈值 %.3f | 已用 %.1f 分钟 | 预计剩余 %.1f 分钟\n', ...
+            100 * progress.completed / progress.total_tasks, progress.completed, progress.total_tasks, ...
+            current_thr, elapsed/60, remaining/60);
+        progress.last_report = tic;
     end
 end
 
@@ -396,7 +380,6 @@ function [R_value, triggered] = run_single_responsiveness_trial(params, num_angl
             r_history(angle_idx) = integral_value / (v0 * duration);
         end
     end
-
     R_value = mean(r_history(~isnan(r_history)));
 end
 
@@ -408,9 +391,9 @@ function [P_value, D_value] = run_single_persistence_trial(params, cfg, seed)
     dt = sim.dt;
     burn_in_index = max(2, floor((T + 1) * cfg.burn_in_ratio));
 
-    initial_positions = sim.positions;
-    centroid0 = mean(initial_positions, 1);
-    offsets0 = initial_positions - centroid0;
+    init_pos = sim.positions;
+    centroid0 = mean(init_pos, 1);
+    offsets0 = init_pos - centroid0;
 
     msd = zeros(T + 1, 1);
     msd(1) = 0;

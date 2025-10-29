@@ -53,17 +53,17 @@ resp_params.forced_turn_duration = 200;  % 强制转向持续时间：外源脉�
 
 % 持久性评估专用参数（无需外源设置）
 pers_params = base_common;
-pers_params.T_max = 800;                 % 更长时间窗口：延长仿真时间以获得更稳定的扩散系数估计
+pers_params.T_max = 600;                 % 更长时间窗口：延长仿真时间以获得更稳定的扩散系数估计
 
 % 参数扫描与重复次数设置
 cj_thresholds = 0.0:0.1:5.0;            % cj_threshold 扫描范围：从0到5，步长0.1，覆盖低到高的显著性阈值
 num_params = numel(cj_thresholds);       % 参数点总数：扫描范围内的参数点数量
-num_runs = 50;                           % 每个参数点的重复实验次数：确保统计结果的可靠性
+num_runs = 100;                           % 每个参数点的重复实验次数：确保统计结果的可靠性
 num_angles = 1;                          % 投影角度数量：只取领导方向进行投影分析
 
 % 持久性拟合配置参数
 pers_cfg = struct();
-pers_cfg.burn_in_ratio = 0.25;          % 预热期比例：前25%的数据不用于拟合，避免初始瞬态影响
+pers_cfg.burn_in_ratio = 0.2;          % 预热期比例：前25%的数据不用于拟合，避免初始瞬态影响
 pers_cfg.min_diffusion = 1e-4;           % 最小扩散系数阈值：防止数值计算中的除零问题
 pers_cfg.min_fit_points = 40;            % 最小拟合点数：确保拟合过程有足够的数据点支持
 
@@ -88,7 +88,7 @@ fprintf('扫描参数点: %d，重复次数: %d，噪声强度: %.3f\n\n', ...
     num_params, num_runs, base_common.angleNoiseIntensity);
 
 %% 2. 主循环 ---------------------------------------------------------------------
-base_seed = 20250301;                    % 基础随机种子：确保实验可重复性
+base_seed = 20250315;                    % 基础随机种子：确保实验可重复性
 loop_tic = tic;                          % 开始计时整个实验过程：用于统计总实验时间
 
 % 并行配置
