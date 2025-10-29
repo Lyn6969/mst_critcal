@@ -161,25 +161,42 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
     D_raw = NaN(num_params, num_runs);
     trigger_failures = zeros(num_params, 1);
 
+    fprintf('  -> 共扫描 %d 个阈值，每个重复 %d 次。\n', num_params, num_runs);
+    progressCounter = 0;
+    dq = parallel.pool.DataQueue;
+    afterEach(dq, @(idx) notifyProgress(idx));
+
     total_timer = tic;
     for param_idx = 1:num_params
         current_cj = cj_thresholds(param_idx);
-        resp_params.cj_threshold = current_cj;
-        pers_params.cj_threshold = current_cj;
+        R_tmp = NaN(1, num_runs);
+        P_tmp = NaN(1, num_runs);
+        D_tmp = NaN(1, num_runs);
+        trigger_tmp = false(1, num_runs);
 
-        for run_idx = 1:num_runs
+        parfor run_idx = 1:num_runs
             seed_base = base_seed + (param_idx - 1) * num_runs + run_idx;
 
-            [R_value, triggered] = run_single_responsiveness_trial(resp_params, num_angles, time_vec_resp, seed_base);
-            R_raw(param_idx, run_idx) = R_value;
-            if ~triggered || isnan(R_value)
-                trigger_failures(param_idx) = trigger_failures(param_idx) + 1;
-            end
+            resp_local = resp_params;
+            pers_local = pers_params;
+            resp_local.cj_threshold = current_cj;
+            pers_local.cj_threshold = current_cj;
 
-            [P_value, D_value] = run_single_persistence_trial(pers_params, pers_cfg, seed_base + 10000);
-            P_raw(param_idx, run_idx) = P_value;
-            D_raw(param_idx, run_idx) = D_value;
+            [R_value, triggered] = run_single_responsiveness_trial(resp_local, num_angles, time_vec_resp, seed_base);
+            R_tmp(run_idx) = R_value;
+            trigger_tmp(run_idx) = (~triggered || isnan(R_value));
+
+            [P_value, D_value] = run_single_persistence_trial(pers_local, pers_cfg, seed_base + 10000);
+            P_tmp(run_idx) = P_value;
+            D_tmp(run_idx) = D_value;
         end
+
+        R_raw(param_idx, :) = R_tmp;
+        P_raw(param_idx, :) = P_tmp;
+        D_raw(param_idx, :) = D_tmp;
+        trigger_failures(param_idx) = sum(trigger_tmp);
+
+        send(dq, param_idx);
     end
 
     fprintf('  模式 [%s] 总耗时 %.1f 分钟\n', mode.id, toc(total_timer) / 60);
@@ -203,6 +220,11 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
     mode_results.cj_thresholds = cj_thresholds(:);
     if mode.useAdaptive && isfield(mode.cfg, 'saliency_threshold')
         mode_results.saliency_threshold = mode.cfg.saliency_threshold;
+    end
+
+    function notifyProgress(idx)
+        progressCounter = progressCounter + 1;
+        fprintf('    [%2d/%2d] 阈值 %.3f 完成\n', progressCounter, num_params, cj_thresholds(idx));
     end
 end
 
