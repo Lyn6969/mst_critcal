@@ -30,7 +30,7 @@ base_common.N = 200;
 base_common.rho = 1;
 base_common.v0 = 1;
 base_common.angleUpdateParameter = 10;
-base_common.angleNoiseIntensity = 0.03; % 固定噪声水平
+base_common.angleNoiseIntensity = 0.05; % 固定噪声水平
 base_common.T_max = 600;
 base_common.dt = 0.1;
 base_common.radius = 5;
@@ -69,7 +69,7 @@ modes = {
 };
 
 time_vec_resp = (0:resp_params.T_max)' * resp_params.dt;
-base_seed = 20250315;
+base_seed = 48;
 
 parallel_cfg = struct();
 parallel_cfg.desired_workers = [];
