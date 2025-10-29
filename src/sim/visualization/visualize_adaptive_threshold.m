@@ -199,9 +199,20 @@ function result = run_visual_persistence(params, cfg)
     msd_history(1) = 0;
     time_vec = (0:T)' * dt;
 
-    fig = figure('Name', '自适应阈值持久性演示', 'Color', 'white', 'Position', [840, 120, 720, 620]);
+    % 新增：追踪阈值和显著性方差历史
+    threshold_history = zeros(T + 1, 1);
+    saliency_history = zeros(T + 1, 1);
+    if sim.useAdaptiveThreshold && ~isempty(sim.cj_threshold_dynamic)
+        threshold_history(1) = mean(sim.cj_threshold_dynamic);
+        saliency_history(1) = mean(sim.local_saliency_state);
+    else
+        threshold_history(1) = sim.cj_threshold;
+        saliency_history(1) = 0;
+    end
 
-    ax_particles = subplot(2,1,1, 'Parent', fig);
+    fig = figure('Name', '自适应阈值持久性演示', 'Color', 'white', 'Position', [840, 120, 720, 880]);
+
+    ax_particles = subplot(3,1,1, 'Parent', fig);
     scatter_plot = scatter(ax_particles, sim.positions(:,1), sim.positions(:,2), 36, 'filled');
     hold(ax_particles, 'on');
     quiver_plot = quiver(ax_particles, sim.positions(:,1), sim.positions(:,2), cos(sim.theta), sin(sim.theta), 0.35, ...
@@ -215,7 +226,19 @@ function result = run_visual_persistence(params, cfg)
     ylabel(ax_particles, 'Y');
     title(ax_particles, '粒子状态与质心轨迹');
 
-    ax_msd = subplot(2,1,2, 'Parent', fig);
+    % 新增：阈值和显著性方差演化图
+    ax_threshold = subplot(3,1,2, 'Parent', fig);
+    hold(ax_threshold, 'on');
+    threshold_line = plot(ax_threshold, time_vec, threshold_history, '-', 'LineWidth', 1.6, 'Color', [0.9 0.5 0.2]);
+    saliency_line = plot(ax_threshold, time_vec, saliency_history, '--', 'LineWidth', 1.2, 'Color', [0.4 0.4 0.4]);
+    hold(ax_threshold, 'off');
+    grid(ax_threshold, 'on');
+    xlabel(ax_threshold, '时间 (s)');
+    ylabel(ax_threshold, '平均阈值 / 显著性方差');
+    legend(ax_threshold, {'平均阈值', '显著性方差'}, 'Location', 'best');
+    title(ax_threshold, '自适应阈值与显著性方差演化');
+
+    ax_msd = subplot(3,1,3, 'Parent', fig);
     msd_line = plot(ax_msd, time_vec, msd_history, '-', 'LineWidth', 1.4, 'Color', [0.4 0.4 0.4]);
     hold(ax_msd, 'on');
     fit_line = plot(ax_msd, NaN, NaN, '--', 'LineWidth', 1.6, 'Color', [0.85 0.2 0.2]);
@@ -236,6 +259,15 @@ function result = run_visual_persistence(params, cfg)
         rel_disp = centered - offsets0;
         msd_history(step_idx + 1) = mean(sum(rel_disp.^2, 2), 'omitnan');
 
+        % 新增：记录阈值和显著性方差
+        if sim.useAdaptiveThreshold && ~isempty(sim.cj_threshold_dynamic)
+            threshold_history(step_idx + 1) = mean(sim.cj_threshold_dynamic);
+            saliency_history(step_idx + 1) = mean(sim.local_saliency_state);
+        else
+            threshold_history(step_idx + 1) = sim.cj_threshold;
+            saliency_history(step_idx + 1) = 0;
+        end
+
         if mod(step_idx, 5) == 0 || step_idx == T
             colors = repmat([0.7 0.7 0.7], params.N, 1);
             if any(sim.isActive)
@@ -246,6 +278,10 @@ function result = run_visual_persistence(params, cfg)
             set(quiver_plot, 'XData', positions(:,1), 'YData', positions(:,2), ...
                 'UData', cos(sim.theta), 'VData', sin(sim.theta));
             set(centroid_trace, 'XData', centroids(1:step_idx+1,1), 'YData', centroids(1:step_idx+1,2));
+
+            % 新增：更新阈值和显著性方差曲线
+            set(threshold_line, 'XData', time_vec(1:step_idx+1), 'YData', threshold_history(1:step_idx+1));
+            set(saliency_line, 'XData', time_vec(1:step_idx+1), 'YData', saliency_history(1:step_idx+1));
 
             set(msd_line, 'YData', msd_history);
             drawnow limitrate;

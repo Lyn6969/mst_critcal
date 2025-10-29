@@ -107,12 +107,17 @@ mode_ids = fieldnames(results);
 for k = 1:numel(mode_ids)
     all_P = [all_P; results.(mode_ids{k}).P_raw(:)]; %#ok<AGROW>
 end
-all_P = all_P(~isnan(all_P));
-if isempty(all_P)
-    P_min = 0; P_max = 1;
+P_means_all = [];
+for k = 1:numel(mode_ids)
+    P_means_all = [P_means_all; results.(mode_ids{k}).P_mean(:)]; %#ok<AGROW>
+end
+P_means_all = P_means_all(~isnan(P_means_all));
+if isempty(P_means_all)
+    P_min = 0;
+    P_max = 1;
 else
-    P_min = min(all_P);
-    P_max = max(all_P);
+    P_min = min(P_means_all);
+    P_max = max(P_means_all);
 end
 P_range = max(P_max - P_min, eps);
 
@@ -122,7 +127,6 @@ for k = 1:numel(mode_ids)
     res.P_mean_norm = (res.P_mean - P_min) / P_range;
     res.P_std_norm = res.P_std / P_range;
     res.P_sem_norm = res.P_sem / P_range;
-    res.P_raw_norm = (res.P_raw - P_min) / P_range;
     results.(key) = res;
 end
 fprintf('持久性归一化：min = %.4f, max = %.4f\n\n', P_min, P_max);
