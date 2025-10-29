@@ -112,8 +112,10 @@ end
 max_P = max(P_mean, [], 'omitnan');
 if max_P > 0
     P_mean_norm = P_mean / max_P;
+    P_std_norm = P_std / max_P;
 else
     P_mean_norm = NaN(size(P_mean));
+    P_std_norm = NaN(size(P_std));
 end
 
 %% 5. 打印结果表 -----------------------------------------------------------------
@@ -124,18 +126,46 @@ disp(T);
 %% 6. 绘图 ----------------------------------------------------------------------
 figure('Color', 'white', 'Position', [180, 120, 720, 540]);
 yyaxis left;
-errorbar(threshold_list, R_mean, R_std, 'o-', 'LineWidth', 1.4, 'DisplayName', '响应性 R');
+plot(threshold_list, R_mean, 'o-', 'LineWidth', 1.4, 'DisplayName', '响应性 R');
 ylabel('响应性 R');
 
 yyaxis right;
-errorbar(threshold_list, P_mean_norm, P_std / max_P, 's-', 'LineWidth', 1.4, ...
-    'DisplayName', '归一化持久性 P');
+plot(threshold_list, P_mean_norm, 's-', 'LineWidth', 1.4, 'DisplayName', '归一化持久性 P');
 ylabel('归一化持久性 P');
 
 xlabel('显著性阈值');
 title('自适应显著性阈值扫描');
 grid on;
 legend('Location', 'best');
+
+%% 6.2 R-P 散点图（颜色表示阈值）
+figure('Color', 'white', 'Position', [220, 160, 620, 480]);
+scatter(R_mean, P_mean_norm, 80, threshold_list, 'filled');
+hold on;
+colormap('turbo');
+cb = colorbar;
+cb.Label.String = 'saliency threshold';
+xlabel('响应性 R');
+ylabel('归一化持久性 P');
+title('R–P 分布（颜色表示显著性阈值）');
+grid on;
+
+fit_spline = [];
+% 拟合 R-P 曲线（CSAPS 平滑样条）
+valid_idx = ~isnan(R_mean) & ~isnan(P_mean_norm);
+if sum(valid_idx) >= 3
+    R_fit = R_mean(valid_idx);
+    P_fit = P_mean_norm(valid_idx);
+    smooth_param = 0.7;
+    pp = csaps(R_fit, P_fit, smooth_param);
+    R_lin = linspace(min(R_fit), max(R_fit), 200);
+    P_curve = fnval(pp, R_lin);
+    plot(R_lin, P_curve, '-', 'LineWidth', 1.6, 'Color', [0 0 0 0.6], 'DisplayName', 'CSAPS 拟合');
+    legend('Location', 'best');
+    fit_spline = pp;
+else
+    pp = [];
+end
 
 %% 7. 保存结果 -------------------------------------------------------------------
 results_dir = fullfile('results', 'adaptive_threshold_scan');
@@ -145,13 +175,17 @@ end
 timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
 mat_file = fullfile(results_dir, sprintf('saliency_scan_%s.mat', timestamp));
 png_file = fullfile(results_dir, sprintf('saliency_scan_%s.png', timestamp));
+png_file_scatter = fullfile(results_dir, sprintf('saliency_scan_scatter_%s.png', timestamp));
 
 save(mat_file, 'threshold_list', 'R_mean', 'R_std', 'P_mean', 'P_std', 'P_mean_norm', ...
-    'trigger_failures', 'params', 'adaptive_cfg', 'pers_cfg', 'runs_per_threshold', 'base_seed');
+    'P_std_norm', 'max_P', 'fit_spline', 'trigger_failures', 'params', 'adaptive_cfg', 'pers_cfg', ...
+    'runs_per_threshold', 'base_seed');
 print(png_file, '-dpng', '-r200');
+print(png_file_scatter, '-dpng', '-r200');
 
 fprintf('结果已保存: %s\n', mat_file);
 fprintf('图像已保存: %s\n', png_file);
+fprintf('散点图已保存: %s\n', png_file_scatter);
 
 %% ============================================================================
 % 辅助函数

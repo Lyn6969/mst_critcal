@@ -1,10 +1,10 @@
 % run_cj_tradeoff_adaptive_scan
 % =========================================================================
 % 目的：
-%   - 在固定噪声场景下比较“固定运动显著性阈值”与“自适应阈值”两种机制，
-%     度量响应性 R 与持久性 P 的权衡关系。
-%   - 自适应机制采用局部序参量来调节粒子的实时阈值，噪声越小阈值越低，
-%     噪声越大阈值越高，从而期待在兼顾持久性的同时提升响应性。
+%   - 在固定噪声场景下比较“固定运动显著性阈值”扫描与“自适应显著性阈值”
+%     两种机制的响应性 R 与持久性 P 的权衡关系。
+%   - 自适应机制采用邻域运动显著性方差作为触发指标，与
+%     visualize_adaptive_threshold 中保持一致 (adaptive_cfg.saliency_threshold)。
 %
 % 输出：
 %   - results/tradeoff/ 下的 MAT 文件，包含两种机制的原始数据与统计量
@@ -45,7 +45,7 @@ resp_params.forced_turn_duration = 200;
 pers_params = base_common;
 pers_params.T_max = 800;
 
-cj_thresholds = 0.0:0.1:5.0;
+cj_thresholds_fixed = 0.0:0.1:5.0;
 num_runs = 50;
 num_angles = 1;
 pers_cfg = struct();
@@ -54,20 +54,22 @@ pers_cfg.min_diffusion = 1e-4;
 pers_cfg.min_fit_points = 40;
 
 adaptive_cfg = struct();
-adaptive_cfg.cj_low = 0.4;
-adaptive_cfg.cj_high = 2.5;
-adaptive_cfg.order_threshold = 0.6;
-adaptive_cfg.include_self = true;
+adaptive_cfg.cj_low = 0.5;
+adaptive_cfg.cj_high = 5.0;
+adaptive_cfg.saliency_threshold = 0.031;
+adaptive_cfg.include_self = false;
 
 modes = {
-    struct('id', 'fixed', 'label', '固定阈值', 'useAdaptive', false, 'cfg', []), ...
-    struct('id', 'adaptive', 'label', '自适应阈值', 'useAdaptive', true, 'cfg', adaptive_cfg)
+    struct('id', 'fixed', 'label', '固定阈值扫描', 'useAdaptive', false, ...
+           'cfg', [], 'cj_thresholds', cj_thresholds_fixed), ...
+    struct('id', 'adaptive', 'label', '自适应阈值', 'useAdaptive', true, ...
+           'cfg', adaptive_cfg, 'cj_thresholds', resp_params.cj_threshold)
 };
 
 time_vec_resp = (0:resp_params.T_max)' * resp_params.dt;
 base_seed = 20250315;
 
-results_cell = cell(numel(modes), 1);
+results = struct();
 
 %% 2. 依次运行两种机制 -----------------------------------------------------------
 for mode_idx = 1:numel(modes)
@@ -75,11 +77,12 @@ for mode_idx = 1:numel(modes)
     fprintf('[%s] 模式：%s\n', mode.id, mode.label);
 
     mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
-        cj_thresholds, num_runs, num_angles, pers_cfg, time_vec_resp, base_seed);
+        num_runs, num_angles, pers_cfg, time_vec_resp, base_seed);
 
-    results_cell{mode_idx} = mode_results;
-    fprintf('  完成：平均 R 最高 %.3f，平均 P 最高 %.3f\n\n', ...
-        max(mode_results.R_mean, [], 'omitnan'), max(mode_results.P_mean, [], 'omitnan'));
+    results.(mode.id) = mode_results;
+
+    fprintf('  完成：平均 R = %.3f, 平均 P = %.3f\n\n', ...
+        mean(mode_results.R_mean, 'omitnan'), mean(mode_results.P_mean, 'omitnan'));
 end
 
 %% 3. 绘制对比权衡图 ------------------------------------------------------------
@@ -91,35 +94,31 @@ timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
 output_mat = fullfile(results_dir, sprintf('cj_tradeoff_adaptive_%s.mat', timestamp));
 output_fig = fullfile(results_dir, sprintf('cj_tradeoff_adaptive_%s.png', timestamp));
 
-figure('Name', '固定阈值 vs 自适应阈值', 'Color', 'white', 'Position', [160, 120, 960, 600]);
+figure('Name', '固定 vs 自适应阈值权衡', 'Color', 'white', 'Position', [160, 120, 960, 600]);
 hold on;
-color_list = lines(numel(modes));
-markers = {'o', 's'};
 
-for mode_idx = 1:numel(modes)
-    mode = modes{mode_idx};
-    data = results_cell{mode_idx};
+% 固定阈值散点（颜色表示阈值大小）
+fixed_data = results.fixed;
+fixed_cj = fixed_data.cj_thresholds;
+scatter(fixed_data.R_mean, fixed_data.P_mean, 70, fixed_cj, 'filled', 'DisplayName', '固定阈值');
+colormap('turbo');
+cb = colorbar;
+cb.Label.String = '固定阈值大小';
+plot(fixed_data.R_mean, fixed_data.P_mean, '-', 'Color', [0.3 0.3 0.3], 'LineWidth', 1.2);
 
-    scatter(data.R_mean, data.P_mean, 60, color_list(mode_idx, :), markers{mode_idx}, ...
-        'filled', 'DisplayName', mode.label);
-
-    % 绘制误差棒
-    for k = 1:numel(cj_thresholds)
-        if isnan(data.R_mean(k)) || isnan(data.P_mean(k))
-            continue;
-        end
-        errorbar(data.R_mean(k), data.P_mean(k), data.P_sem(k), data.P_sem(k), ...
-            data.R_sem(k), data.R_sem(k), 'Color', color_list(mode_idx, :)*0.7, ...
-            'LineWidth', 0.9, 'CapSize', 5);
-    end
-
-    plot(data.R_mean, data.P_mean, '-', 'Color', color_list(mode_idx, :), ...
-        'LineWidth', 1.4);
-end
+% 自适应阈值结果（单点）
+adaptive_data = results.adaptive;
+adaptive_R = adaptive_data.R_mean;
+adaptive_P = adaptive_data.P_mean;
+adaptive_point = scatter(adaptive_R, adaptive_P, 160, [0.85 0.2 0.2], 'filled', ...
+    'DisplayName', sprintf('自适应阈值 %.3f', adaptive_cfg.saliency_threshold));
+adaptive_point.Marker = 'p';
+adaptive_point.MarkerEdgeColor = [0.5 0 0];
+adaptive_point.MarkerFaceColor = [0.85 0.2 0.2];
 
 xlabel('响应性 R');
 ylabel('持久性 P');
-title('自适应阈值提升响应性的同时保持持久性');
+title('固定阈值扫描 vs 自适应显著性阈值');
 legend('Location', 'best');
 grid on;
 
@@ -128,14 +127,14 @@ fprintf('图像已保存至: %s\n', output_fig);
 
 %% 4. 保存数据 --------------------------------------------------------------------
 summary = struct();
-summary.description = 'Fixed vs adaptive cj threshold trade-off';
+summary.description = 'Fixed threshold scan vs adaptive saliency-threshold trade-off';
 summary.timestamp = timestamp;
 summary.base_params_resp = resp_params;
 summary.base_params_pers = pers_params;
 summary.adaptive_config = adaptive_cfg;
-summary.cj_thresholds = cj_thresholds;
+summary.cj_thresholds_fixed = cj_thresholds_fixed;
 summary.num_runs = num_runs;
-summary.mode_results = results_cell;
+summary.results = results;
 summary.matlab_version = version;
 
 save(output_mat, 'summary', '-v7.3');
@@ -143,7 +142,7 @@ fprintf('数据已保存至: %s\n', output_mat);
 
 %% -------------------------------------------------------------------------------
 function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
-    cj_thresholds, num_runs, num_angles, pers_cfg, time_vec_resp, base_seed)
+    num_runs, num_angles, pers_cfg, time_vec_resp, base_seed)
 
     if mode.useAdaptive
         resp_params.useAdaptiveThreshold = true;
@@ -155,6 +154,7 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
         pers_params.useAdaptiveThreshold = false;
     end
 
+    cj_thresholds = mode.cj_thresholds;
     num_params = numel(cj_thresholds);
     R_raw = NaN(num_params, num_runs);
     P_raw = NaN(num_params, num_runs);
@@ -201,6 +201,9 @@ function mode_results = run_tradeoff_mode(resp_params, pers_params, mode, ...
 
     mode_results.D_mean = mean(D_raw, 2, 'omitnan');
     mode_results.cj_thresholds = cj_thresholds(:);
+    if mode.useAdaptive && isfield(mode.cfg, 'saliency_threshold')
+        mode_results.saliency_threshold = mode.cfg.saliency_threshold;
+    end
 end
 
 function [R_value, triggered] = run_single_responsiveness_trial(params, num_angles, time_vec, seed)
