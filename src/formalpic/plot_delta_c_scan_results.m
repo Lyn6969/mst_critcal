@@ -31,7 +31,7 @@ FILL_ALPHA = 0.8;               % c1-c2 之间填充区域的透明度 (0-1)
 FILL_COLOR = [0.5 0.5 0.5];     % 填充颜色（灰色）
 
 % 网格设置
-GRID_ON = 'on';             % 网格开关 ('on' 或 'off')
+GRID_ON = 'off';             % 网格开关 ('on' 或 'off')
 GRID_ALPHA = 0.1;           % 网格透明度 (0-1)
 GRID_LINE_STYLE = '--';     % 网格线型 ('-' 实线, '--' 虚线, ':' 点线, '-.' 点划线)
 
@@ -41,7 +41,7 @@ LEGEND_BOX = 'on';             % 图例边框 ('on' 或 'off')
 
 %% 加载数据
 mat_file = 'data.mat';
-mat_path = 'data\experiments\delta_c_scan\N200_noise0.000_20251023_202713\';
+mat_path = 'mst_critcal\data\experiments\delta_c_m_vs_1_scan\20251029_233333\';
 
 % 获取项目根目录（用于转换为绝对路径）
 script_dir = fileparts(mfilename('fullpath'));
@@ -54,33 +54,37 @@ results = data.results;
 
 % 提取数据（转为行向量）
 thresholds = results.cj_thresholds(:)';
-c1_mean = results.c1_mean(:)';
-c2_mean = results.c2_mean(:)';
-c1_sem = results.c1_sem(:)';
-c2_sem = results.c2_sem(:)';
-delta_c = results.delta_c(:)';
 
-%% 设置输出路径
-data_root = fullfile(project_root, 'data');
-results_root = fullfile(project_root, 'results');
-
-if startsWith(mat_path_abs, data_root)
-    relative_path = mat_path_abs(length(data_root)+1:end);
-    if startsWith(relative_path, filesep)
-        relative_path = relative_path(2:end);
-    end
-    output_dir = fullfile(results_root, relative_path);
+% 级联规模
+if isfield(results, 'c_mean')
+    c_mean = results.c_mean;
 else
-    output_dir = results_root;
+    error('结果中缺少 c_mean 字段，无法绘图。');
 end
 
-if ~exist(output_dir, 'dir')
-    mkdir(output_dir);
+% 1 vs m 数据（c1 与 c2）
+if size(c_mean, 2) < 2
+    error('c_mean 列数少于 2，无法生成 c1/c2 对比。');
+end
+c1_mean = c_mean(:, 1)';
+c2_mean = c_mean(:, 2)';
+
+% Δc = c2 - c1
+delta_c = c2_mean - c1_mean;
+
+%% 设置输出路径
+pic_dir = fullfile(project_root, 'mst_critcal', 'pic');
+if ~exist(pic_dir, 'dir')
+    mkdir(pic_dir);
 end
 
 [~, mat_name, ~] = fileparts(fullfile(mat_path_abs, mat_file));
-cascade_pdf = fullfile(output_dir, sprintf('%s_cascade.pdf', mat_name));
-delta_pdf = fullfile(output_dir, sprintf('%s_delta.pdf', mat_name));
+cascade_pdf = fullfile(pic_dir, sprintf('%s_cascade.pdf', mat_name));
+delta_pdf = fullfile(pic_dir, sprintf('%s_delta.pdf', mat_name));
+
+%% 先计算最优阈值（Δc 的峰值位置）
+[max_delta_c, max_idx] = max(delta_c);
+optimal_cj = thresholds(max_idx);
 
 %% 图1：级联规模对比
 fig1 = figure('Position', [100, 100, FIG_WIDTH, FIG_HEIGHT], 'Color', 'white');
@@ -92,11 +96,11 @@ hold(ax1, 'on');
 fill([thresholds fliplr(thresholds)], [c1_mean fliplr(c2_mean)], FILL_COLOR, ...
     'FaceAlpha', FILL_ALPHA, 'EdgeColor', 'none', 'HandleVisibility', 'off');
 
-% c1 曲线（红色）
-plot(ax1, thresholds, c1_mean, 'Color', [1 0 0], 'LineWidth', LINE_WIDTH, 'DisplayName', 'c_1');
+% c1 曲线（蓝色实线）
+plot(ax1, thresholds, c1_mean, 'Color', [0 0 1], 'LineWidth', LINE_WIDTH, 'DisplayName', 'c_1');
 
-% c2 曲线（蓝色）
-plot(ax1, thresholds, c2_mean, 'Color', [0 0 1], 'LineWidth', LINE_WIDTH, 'DisplayName', 'c_2');
+% c2 曲线（蓝色虚线）
+plot(ax1, thresholds, c2_mean, '--', 'Color', [0 0 1], 'LineWidth', LINE_WIDTH, 'DisplayName', 'c_2');
 
 % 先设置坐标轴属性（包括刻度字体粗细）
 ax1.FontName = FONT_NAME;
@@ -114,12 +118,13 @@ xlabel(ax1, 'M_T', 'Interpreter', 'tex', 'FontName', FONT_NAME, 'FontSize', LABE
 ylabel(ax1, 'Avg. Cascade Size', 'Interpreter', 'tex', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
 legend(ax1, 'Location', LEGEND_LOCATION, 'Box', LEGEND_BOX, 'FontSize', LEGEND_FONT_SIZE);
 
+% Δc 峰值位置红色虚线（与图2保持一致，不显示在图例中）
+xline(ax1, optimal_cj, '--', 'Color', [0.85 0 0], 'LineWidth', 2, 'HandleVisibility', 'off');
+
 exportgraphics(fig1, cascade_pdf, 'ContentType', 'vector');
 fprintf('级联规模图已保存至: %s\n', cascade_pdf);
 
 %% 图2：Delta C 分析
-[max_delta_c, max_idx] = max(delta_c);
-optimal_cj = thresholds(max_idx);
 
 fig2 = figure('Position', [100, 100, FIG_WIDTH, FIG_HEIGHT], 'Color', 'white');
 
@@ -127,9 +132,10 @@ ax2 = axes('Parent', fig2);
 hold(ax2, 'on');
 
 % Delta C 曲线
-plot(ax2, thresholds, delta_c, 'Color', [45 45 45]/255, 'LineWidth', LINE_WIDTH);
-plot(ax2, optimal_cj, max_delta_c, 'o', 'MarkerSize', 7, ...
-    'MarkerFaceColor', [228 26 28]/255, 'MarkerEdgeColor', 'k', 'LineWidth', MARKER_LINE_WIDTH);
+delta_color = [38 94 180] / 255;
+plot(ax2, thresholds, delta_c, 'Color', delta_color, 'LineWidth', LINE_WIDTH);
+% 峰值位置的红色虚线（不显示在图例中）
+xline(ax2, optimal_cj, '--', 'Color', [0.85 0 0], 'LineWidth', 2, 'HandleVisibility', 'off');
 
 % 先设置坐标轴属性（包括刻度字体粗细）
 ax2.FontName = FONT_NAME;
