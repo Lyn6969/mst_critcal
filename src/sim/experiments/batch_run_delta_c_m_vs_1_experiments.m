@@ -6,7 +6,7 @@
 clc;
 clear;
 close all;
-
+addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 %% 参数配置
 N_values = [200, 400, 800];
 num_repeats = 5;
