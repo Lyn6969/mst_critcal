@@ -37,7 +37,7 @@ COLORBAR_LABEL_FONT_WEIGHT = 'Bold';
 
 % 数据文件（请根据实际结果路径修改）
 mat_file_m_vs_1 = fullfile('mst_critcal', 'data', 'experiments', 'delta_c_m_vs_1_scan', ...
-    '20251029_233333', 'data.mat');
+    '20251030_110128', 'data.mat');
 
 % 输出文件名
 figure_names = { ...
@@ -87,6 +87,7 @@ total_pulses = numel(res_m_vs_1.pulse_counts);
 if total_pulses < 1
     error('结果中缺少 pulse_counts 信息，无法绘制图像。');
 end
+N_particles = res_m_vs_1.parameters.N;
 
 %% 颜色与映射 -------------------------------------------------------------
 % 蓝色色系，从深到浅
@@ -110,7 +111,7 @@ configure_axes(ax1, 'M_T', 'Avg. Cascade Size', GRID_ON, GRID_ALPHA, GRID_LINE_S
 % 设置纵轴范围
 set_axis_limits(ax1, thresholds, c_mean);
 
-fig1_path = fullfile(pic_dir, sprintf('%s.pdf', figure_names{1}));
+fig1_path = fullfile(pic_dir, sprintf('%s_N%d.pdf', figure_names{1}, N_particles));
 save_figure(fig1, fig1_path);
 fprintf('图1已保存至: %s (色标：%s 暂未显示)\n', fig1_path, INFO_LABEL);
 
@@ -130,7 +131,7 @@ end
 configure_axes(ax2, 'M_T', '1 vs m Sensitivity', GRID_ON, GRID_ALPHA, GRID_LINE_STYLE, TICK_DIR);
 set_axis_limits(ax2, thresholds, delta_c_1m);
 
-fig2_path = fullfile(pic_dir, sprintf('%s.pdf', figure_names{2}));
+fig2_path = fullfile(pic_dir, sprintf('%s_N%d.pdf', figure_names{2}, N_particles));
 save_figure(fig2, fig2_path);
 fprintf('图2已保存至: %s (色标：%s 暂未显示)\n', fig2_path, INFO_LABEL);
 
@@ -162,7 +163,7 @@ end
 configure_axes(ax3, 'M_T', 'm vs (m+1) Sensitivity', GRID_ON, GRID_ALPHA, GRID_LINE_STYLE, TICK_DIR);
 set_axis_limits(ax3, thresholds, delta_c_mm1);
 
-fig3_path = fullfile(pic_dir, sprintf('%s.pdf', figure_names{3}));
+fig3_path = fullfile(pic_dir, sprintf('%s_N%d.pdf', figure_names{3}, N_particles));
 save_figure(fig3, fig3_path);
 fprintf('图3已保存至: %s (色标：%s 暂未显示)\n', fig3_path, INFO_LABEL);
 
@@ -199,7 +200,7 @@ cb_pos(2) = 0.28;
 cb_pos(4) = max(0.12, cb_pos(4));
 cb.Position = cb_pos;
 
-fig_cb_path = fullfile(pic_dir, sprintf('%s.pdf', figure_names{4}));
+fig_cb_path = fullfile(pic_dir, sprintf('%s_N%d.pdf', figure_names{4}, N_particles));
 exportgraphics(fig_cb, fig_cb_path, 'ContentType', 'vector');
 fprintf('色标图已保存至: %s\n', fig_cb_path);
 close(fig_cb);
