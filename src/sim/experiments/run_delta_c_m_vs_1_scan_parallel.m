@@ -21,9 +21,13 @@ m_values = 2:10;                        % 与 c1 对比的初发个体数量
 pulse_counts = [1, m_values];
 num_pulses = numel(pulse_counts);
 
+BASE_SEED = 202501;                     % 基础随机数种子（可调整）
+rng(BASE_SEED, 'threefry');
+
 trials_per_param = num_runs * num_pulses;
 completed_tasks = 0;
 total_tasks = num_params * trials_per_param;
+seed_matrix = BASE_SEED + reshape(0:(total_tasks - 1), num_params, num_runs, num_pulses);
 
 fprintf('参数扫描范围: [%.1f, %.1f], 步长 %.1f，共 %d 个参数点\n', ...
     cj_threshold_min, cj_threshold_max, cj_threshold_step, num_params);
@@ -36,6 +40,7 @@ fprintf('使用并行池: %d workers\n', pool.NumWorkers);
 
 %% 3. 预分配
 c_raw = NaN(num_params, num_runs, num_pulses);
+b_raw = NaN(num_params, num_runs, num_pulses);
 
 experiment_start_time = tic;
 progress_update_timer = tic;
@@ -58,6 +63,7 @@ shared_pulse_counts = parallel.pool.Constant(pulse_counts);
 
 parfor param_idx = 1:num_params
     local_c = NaN(num_runs, num_pulses);
+    local_b = NaN(num_runs, num_pulses);
     current_params = shared_params.Value;
     current_params.cj_threshold = cj_thresholds(param_idx);
     local_pulse_counts = shared_pulse_counts.Value;
@@ -65,12 +71,16 @@ parfor param_idx = 1:num_params
     for run_idx = 1:num_runs
         for pulse_idx = 1:num_pulses
             pulse = local_pulse_counts(pulse_idx);
-            local_c(run_idx, pulse_idx) = run_single_experiment(current_params, pulse);
+            seed_value = seed_matrix(param_idx, run_idx, pulse_idx);
+            [cascade_size, branching_ratio] = run_single_experiment(current_params, pulse, seed_value);
+            local_c(run_idx, pulse_idx) = cascade_size;
+            local_b(run_idx, pulse_idx) = branching_ratio;
             send(progress_queue, 1);
         end
     end
 
     c_raw(param_idx, :, :) = local_c;
+    b_raw(param_idx, :, :) = local_b;
 end
 
 total_elapsed_seconds = toc(experiment_start_time);
@@ -78,6 +88,7 @@ fprintf('\n实验执行完毕，用时 %.2f 分钟。\n', total_elapsed_seconds 
 
 %% 5. 统计
 [c_mean, c_std, c_sem] = compute_statistics_3d(c_raw);
+[b_mean, b_std, b_sem] = compute_statistics_3d(b_raw);
 error_count = sum(isnan(c_raw), 2);
 error_count = reshape(error_count, num_params, num_pulses);
 success_rate_matrix = 1 - error_count / num_runs;
@@ -101,6 +112,10 @@ results.c_raw = c_raw;
 results.c_mean = c_mean;
 results.c_std = c_std;
 results.c_sem = c_sem;
+results.branching_raw = b_raw;
+results.branching_mean = b_mean;
+results.branching_std = b_std;
+results.branching_sem = b_sem;
 results.delta_c = delta_c;
 results.delta_sem = delta_sem;
 results.timestamp = timestamp;
@@ -113,6 +128,7 @@ results.success_rate_matrix = success_rate_matrix;
 results.success_rate_per_pulse = success_rate_per_pulse;
 results.parallel_workers = pool.NumWorkers;
 results.matlab_version = version;
+results.base_seed = BASE_SEED;
 
 save(output_filename, 'results', '-v7.3');
 fprintf('结果已保存至: %s\n', output_filename);
@@ -135,6 +151,7 @@ optimal_cj = cj_thresholds(max_param_idx);
 optimal_m = pulse_counts(max_m_idx + 1);
 fprintf('Δc 峰值: %.4f (cj_threshold = %.2f, m = %d)\n', ...
     max_delta, optimal_cj, optimal_m);
+fprintf('平均分支比范围: [%.3f, %.3f]\n', min(b_mean(:, 1)), max(b_mean(:, 1)));
 
 quicklook_path = fullfile(output_dir, 'result');
 render_quicklook_figure(cj_thresholds, pulse_counts, c_mean, c_sem, ...
@@ -172,18 +189,96 @@ fprintf('\n实验完成！\n');
 end
 
 %% 辅助函数 ---------------------------------------------------------------
-function result = run_single_experiment(params, pulse_count)
+function [cascade_size, branching_ratio] = run_single_experiment(params, pulse_count, seed_value)
     try
+        cleanup_stream = [];
+        if nargin >= 3 && ~isempty(seed_value)
+            parent_stream = RandStream.getGlobalStream;
+            child_stream = RandStream('Threefry', 'Seed', seed_value);
+            RandStream.setGlobalStream(child_stream);
+            cleanup_stream = onCleanup(@() RandStream.setGlobalStream(parent_stream));
+        end
+
         sim = ParticleSimulationWithExternalPulse(params);
         sim.external_pulse_count = pulse_count;
-        cascade_size = sim.runSingleExperiment(pulse_count);
-        result = cascade_size;
+        [branching_ratio, cascade_size] = compute_branching_ratio_with_cascade(sim, pulse_count);
+        if ~isempty(cleanup_stream)
+            clear cleanup_stream;
+        end
     catch ME
         warning('run_single_experiment:failure', ...
             'Experiment failed (cj=%.3f, pulse=%d): %s', ...
             params.cj_threshold, pulse_count, ME.message);
-        result = NaN;
+        cascade_size = NaN;
+        branching_ratio = NaN;
     end
+end
+
+function [ratio, cascade_size] = compute_branching_ratio_with_cascade(sim, pulse_count)
+    % 复制自 compute_branching_ratio，并返回最终级联规模
+
+    sim.resetCascadeTracking();
+    sim.initializeParticles();
+
+    original_pulse_count = sim.external_pulse_count;
+    sim.external_pulse_count = pulse_count;
+    sim.current_step = 0;
+
+    parent_flags = false(sim.N, 1);
+    children_count = zeros(sim.N, 1);
+    counting_enabled = false;
+    tracking_deadline = sim.T_max;
+    track_steps_after_trigger = 100;
+
+    for step = 1:sim.stabilization_steps
+        sim.step();
+    end
+
+    max_remaining_steps = max(1, sim.T_max - sim.current_step);
+    for step = 1:max_remaining_steps
+        prev_active = sim.isActive;
+        sim.step();
+
+        if ~counting_enabled && sim.external_pulse_triggered
+            counting_enabled = true;
+            tracking_deadline = min(sim.T_max, sim.current_step + track_steps_after_trigger);
+        end
+
+        newly_active = sim.isActive & ~prev_active;
+        if counting_enabled && sim.current_step <= tracking_deadline && any(newly_active)
+            activated_indices = find(newly_active);
+            for idx = activated_indices'
+                parent_flags(idx) = true;
+                parent = sim.src_ids{idx};
+                if ~isempty(parent)
+                    parent_idx = parent(1);
+                    if parent_idx >= 1 && parent_idx <= sim.N
+                        parent_idx = round(parent_idx);
+                        children_count(parent_idx) = children_count(parent_idx) + 1;
+                        parent_flags(parent_idx) = true;
+                    end
+                end
+            end
+        end
+
+        if counting_enabled && (~sim.cascade_active || sim.current_step >= tracking_deadline)
+            break;
+        end
+    end
+
+    if ~counting_enabled
+        ratio = 0;
+    else
+        parents = find(parent_flags);
+        if isempty(parents)
+            ratio = 0;
+        else
+            ratio = sum(children_count(parents)) / numel(parents);
+        end
+    end
+
+    cascade_size = sum(sim.everActivated) / sim.N;
+    sim.external_pulse_count = original_pulse_count;
 end
 
 function render_quicklook_figure(thresholds, pulse_counts, c_mean, c_sem, ...
