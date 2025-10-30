@@ -14,21 +14,26 @@ RNG_SEED_C2 = 3025;              % c2 实验随机数种子
 EXTRA_STEPS_AFTER_CASCADE = 20;  % 级联完成后继续仿真的步数（保证位置稳定）
 
 %% -------------------- 图像与配色配置 --------------------
-FIG_WIDTH = 500;
-FIG_HEIGHT = 500;
+FIG_WIDTH_TRAJ = 500;
+FIG_HEIGHT_TRAJ = 500;
+FIG_WIDTH_CASCADE = 1000;
+FIG_HEIGHT_CASCADE = 200;
 AXIS_LINE_WIDTH = 1.5;
 TICK_FONT_SIZE = 12;
 LABEL_FONT_SIZE = 13;
 FONT_NAME = 'Arial';
 LABEL_FONT_WEIGHT = 'Bold';
 TICK_FONT_WEIGHT = 'Bold';
+LEGEND_FONT_SIZE = 12;
 
 TRAJ_LINE_WIDTH = 1.0;
 SHOCK_LINE_WIDTH = 1.8;
 
 COLOR_ORANGE = [1.0 0.55 0.0];
 COLOR_RED = [0.85 0.1 0.1];
-COLOR_GREY = [0.7 0.7 0.7];
+COLOR_GREY = [0.65 0.65 0.65];
+CASCADE_C1_COLOR = [0.18 0.36 0.78];
+CASCADE_C2_COLOR = CASCADE_C1_COLOR;
 
 AGENT_SCALE = 1.0;          % 个体绘制尺寸缩放因子
 HEAD_RADIUS = 0.25;
@@ -37,12 +42,13 @@ TAIL_WIDTH = 0.12;
 HEAD_RESOLUTION = 40;
 BASE_FACE_ALPHA = 0.6;
 HIGHLIGHT_FACE_ALPHA = 0.9;
+CASCADE_LINE_WIDTH = 2.0;
 
 BLUE_GRADIENT_START = [0.85 0.92 1.0];
 BLUE_GRADIENT_END = [0.00 0.10 0.45];
 RED_GRADIENT_START = [1.00 0.86 0.86];
 RED_GRADIENT_END = [0.55 0.00 0.00];
-BLUE_TRAJ_ALPHA = 0.3;     % 普通个体轨迹透明度
+BLUE_TRAJ_ALPHA = 0.2;     % 普通个体轨迹透明度
 RED_TRAJ_ALPHA = 0.6;      % 信息个体轨迹透明度
 
 %% -------------------- 仿真公共参数 --------------------
@@ -79,10 +85,11 @@ rng(RNG_SEED_C2);
 result_c2 = simulate_cascade(params, 2, EXTRA_STEPS_AFTER_CASCADE);
 
 %% -------------------- 绘制与导出 --------------------
-fig1 = figure('Position', [100, 100, FIG_WIDTH, FIG_HEIGHT], 'Color', 'white');
+fig1 = figure('Position', [100, 100, FIG_WIDTH_TRAJ, FIG_HEIGHT_TRAJ], 'Color', 'white');
 ax1 = axes('Parent', fig1);
-plot_trajectories(ax1, result_c1, 'c_1 轨迹（单初发个体）', ...
-    COLOR_GREY, COLOR_ORANGE, COLOR_RED, TRAJ_LINE_WIDTH, SHOCK_LINE_WIDTH, ...
+plot_trajectories(ax1, result_c1, '', ...
+    COLOR_GREY, COLOR_ORANGE, COLOR_RED, ...
+    TRAJ_LINE_WIDTH, SHOCK_LINE_WIDTH, ...
     HEAD_RADIUS * AGENT_SCALE, TAIL_LENGTH * AGENT_SCALE, TAIL_WIDTH * AGENT_SCALE, HEAD_RESOLUTION, ...
     BASE_FACE_ALPHA, HIGHLIGHT_FACE_ALPHA, ...
     BLUE_GRADIENT_START, BLUE_GRADIENT_END, RED_GRADIENT_START, RED_GRADIENT_END, ...
@@ -90,26 +97,75 @@ plot_trajectories(ax1, result_c1, 'c_1 轨迹（单初发个体）', ...
     AXIS_LINE_WIDTH, FONT_NAME, TICK_FONT_SIZE, LABEL_FONT_SIZE, ...
     TICK_FONT_WEIGHT, LABEL_FONT_WEIGHT);
 
-fig2 = figure('Position', [150, 150, FIG_WIDTH, FIG_HEIGHT], 'Color', 'white');
+fig2 = figure('Position', [150, 150, FIG_WIDTH_TRAJ, FIG_HEIGHT_TRAJ], 'Color', 'white');
 ax2 = axes('Parent', fig2);
-plot_trajectories(ax2, result_c2, 'c_2 轨迹（双初发个体）', ...
-    COLOR_GREY, COLOR_ORANGE, COLOR_RED, TRAJ_LINE_WIDTH, SHOCK_LINE_WIDTH, ...
+plot_trajectories(ax2, result_c2, '', ...
+    COLOR_GREY, COLOR_ORANGE, COLOR_RED, ...
+    TRAJ_LINE_WIDTH, SHOCK_LINE_WIDTH, ...
     HEAD_RADIUS * AGENT_SCALE, TAIL_LENGTH * AGENT_SCALE, TAIL_WIDTH * AGENT_SCALE, HEAD_RESOLUTION, ...
     BASE_FACE_ALPHA, HIGHLIGHT_FACE_ALPHA, ...
     BLUE_GRADIENT_START, BLUE_GRADIENT_END, RED_GRADIENT_START, RED_GRADIENT_END, ...
     BLUE_TRAJ_ALPHA, RED_TRAJ_ALPHA, ...
     AXIS_LINE_WIDTH, FONT_NAME, TICK_FONT_SIZE, LABEL_FONT_SIZE, ...
     TICK_FONT_WEIGHT, LABEL_FONT_WEIGHT);
+
+fig3 = figure('Position', [200, 200, FIG_WIDTH_CASCADE, FIG_HEIGHT_CASCADE], 'Color', 'white');
+ax3 = axes('Parent', fig3);
+hold(ax3, 'on');
+
+time_steps_c1 = result_c1.time_steps;
+cascade_c1 = result_c1.cascade_history;
+time_steps_c2 = result_c2.time_steps;
+cascade_c2 = result_c2.cascade_history;
+
+plot(ax3, time_steps_c1, cascade_c1, 'LineWidth', CASCADE_LINE_WIDTH, ...
+    'Color', CASCADE_C1_COLOR, 'DisplayName', 'c_1');
+plot(ax3, time_steps_c2, cascade_c2, 'LineWidth', CASCADE_LINE_WIDTH, ...
+    'Color', CASCADE_C2_COLOR, 'LineStyle', '--', 'DisplayName', 'c_2');
+
+if isfield(result_c1, 'trigger_step') && ~isempty(result_c1.trigger_step)
+    xline(ax3, result_c1.trigger_step, '--', 'Color', [0.95 0.75 0.1], 'LineWidth', 2.4, 'HandleVisibility', 'off');
+end
+
+ax3.LineWidth = AXIS_LINE_WIDTH;
+ax3.FontName = FONT_NAME;
+ax3.FontSize = TICK_FONT_SIZE;
+ax3.FontWeight = TICK_FONT_WEIGHT;
+ax3.TickDir = 'in';
+grid(ax3, 'off');
+box(ax3, 'on');
+
+xlabel(ax3, 'Time', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
+ylabel(ax3, 'Cascade Size', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
+legend(ax3, 'Location', 'northwest', 'FontSize', LEGEND_FONT_SIZE, 'Interpreter', 'tex');
+
+max_time = max([time_steps_c1(end), time_steps_c2(end)]);
+if max_time <= 0
+    max_time = 1;
+end
+xlim(ax3, [0, max_time]);
+
+max_cascade = max([cascade_c1; cascade_c2]);
+upper_limit = min(1, max_cascade * 1.1 + 1e-3);
+if upper_limit <= 0.05
+    upper_limit = 0.05;
+end
+ylim(ax3, [0, upper_limit]);
+
+hold(ax3, 'off');
 
 % 输出路径
 c1_pdf = fullfile(pic_dir, 'cascade_trajectory_c1.pdf');
 c2_pdf = fullfile(pic_dir, 'cascade_trajectory_c2.pdf');
+cascade_pdf = fullfile(pic_dir, 'cascade_size_timeseries.pdf');
 
 exportgraphics(fig1, c1_pdf, 'ContentType', 'vector');
 exportgraphics(fig2, c2_pdf, 'ContentType', 'vector');
+exportgraphics(fig3, cascade_pdf, 'ContentType', 'vector');
 
-fprintf('c1 轨迹图已保存至: %s\n', c1_pdf);
-fprintf('c2 轨迹图已保存至: %s\n', c2_pdf);
+fprintf('c1 trajectory figure saved to: %s\n', c1_pdf);
+fprintf('c2 trajectory figure saved to: %s\n', c2_pdf);
+fprintf('Cascade-size timeline saved to: %s\n', cascade_pdf);
 
 %% -------------------- 辅助函数定义 --------------------
 function result = simulate_cascade(params, external_count, extra_steps_after_cascade)
@@ -143,6 +199,8 @@ function result = simulate_cascade(params, external_count, extra_steps_after_cas
     positions_history(1, :, :) = simulation.positions;
     theta_history = zeros(max_steps + 1, num_agents);
     theta_history(1, :) = simulation.theta.';
+    cascade_history = zeros(max_steps + 1, 1);
+    cascade_history(1) = sum(simulation.everActivated) / simulation.N;
 
     external_indices = [];
     step_counter = 0;
@@ -153,6 +211,7 @@ function result = simulate_cascade(params, external_count, extra_steps_after_cas
         step_counter = step_counter + 1;
         positions_history(step_counter + 1, :, :) = simulation.positions;
         theta_history(step_counter + 1, :) = simulation.theta.';
+        cascade_history(step_counter + 1) = sum(simulation.everActivated) / simulation.N;
 
         if simulation.external_pulse_triggered && isempty(external_indices)
             external_indices = find(simulation.external_activation_timer > 0 | simulation.isExternallyActivated);
@@ -174,6 +233,7 @@ function result = simulate_cascade(params, external_count, extra_steps_after_cas
                 step_counter = step_counter + 1;
                 positions_history(step_counter + 1, :, :) = simulation.positions;
                 theta_history(step_counter + 1, :) = simulation.theta.';
+                cascade_history(step_counter + 1) = sum(simulation.everActivated) / simulation.N;
             end
             break;
         end
@@ -181,10 +241,15 @@ function result = simulate_cascade(params, external_count, extra_steps_after_cas
 
     positions_history = positions_history(1:step_counter + 1, :, :);
     theta_history = theta_history(1:step_counter + 1, :);
+    cascade_history = cascade_history(1:step_counter + 1, :);
 
     result.positions_history = positions_history;
     result.final_positions = squeeze(positions_history(end, :, :));
     result.theta_history = theta_history;
+    result.cascade_history = cascade_history;
+    result.time_vector = (0:step_counter)' * params.dt;
+    result.time_steps = (0:step_counter)';
+    result.trigger_step = params.stabilization_steps + 1;
     result.cascade_mask = simulation.everActivated;
     result.external_indices = external_indices(:)';
     result.field_size = params.fieldSize;
@@ -201,7 +266,8 @@ function result = simulate_cascade(params, external_count, extra_steps_after_cas
 end
 
 function plot_trajectories(ax, result, title_text, ...
-    color_base, color_orange, color_red, traj_line_width, shock_line_width, ...
+    color_base, color_orange, color_red, ...
+    traj_line_width, shock_line_width, ...
     head_radius, tail_length, tail_width, head_resolution, ...
     base_face_alpha, highlight_face_alpha, ...
     blue_grad_start, blue_grad_end, red_grad_start, red_grad_end, ...
@@ -267,9 +333,13 @@ function plot_trajectories(ax, result, title_text, ...
     ax.FontWeight = tick_font_weight;
     ax.TickDir = 'in';
 
-    xlabel(ax, 'X 位置', 'FontName', font_name, 'FontSize', label_font_size, 'FontWeight', label_font_weight);
-    ylabel(ax, 'Y 位置', 'FontName', font_name, 'FontSize', label_font_size, 'FontWeight', label_font_weight);
-    title(ax, title_text, 'FontName', font_name, 'FontSize', label_font_size, 'FontWeight', label_font_weight);
+    xlabel(ax, 'x', 'FontName', font_name, 'FontSize', label_font_size, 'FontWeight', label_font_weight);
+    ylabel(ax, 'y', 'FontName', font_name, 'FontSize', label_font_size, 'FontWeight', label_font_weight);
+    if ~isempty(title_text)
+        title(ax, title_text, 'FontName', font_name, 'FontSize', label_font_size, 'FontWeight', label_font_weight);
+    else
+        title(ax, '');
+    end
 end
 
 function draw_agent_shape(ax, position, heading, color, ...

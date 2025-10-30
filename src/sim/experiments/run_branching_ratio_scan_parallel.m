@@ -43,8 +43,8 @@ params = default_simulation_parameters();
 
 % 设置参数扫描范围
 cj_threshold_min = 0;                           % 最小阈值 (无量纲)
-cj_threshold_max = 6.0;                           % 最大阈值 (无量纲)
-cj_threshold_step = 0.1;                          % 扫描步长 (无量纲)
+cj_threshold_max = 5.0;                           % 最大阈值 (无量纲)
+cj_threshold_step = 0.05;                          % 扫描步长 (无量纲)
 cj_thresholds = cj_threshold_min:cj_threshold_step:cj_threshold_max;  % 阈值序列
 num_params = numel(cj_thresholds);                % 参数点总数
 

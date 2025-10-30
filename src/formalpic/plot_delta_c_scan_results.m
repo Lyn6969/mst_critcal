@@ -41,7 +41,7 @@ LEGEND_BOX = 'on';             % 图例边框 ('on' 或 'off')
 
 %% 加载数据
 mat_file = 'data.mat';
-mat_path = 'mst_critcal\data\experiments\delta_c_m_vs_1_scan\20251029_233333\';
+mat_path = 'mst_critcal\data\experiments\delta_c_m_vs_1_scan\20251030_204718\';
 
 % 获取项目根目录（用于转换为绝对路径）
 script_dir = fileparts(mfilename('fullpath'));
