@@ -1,3 +1,5 @@
+% batch_run_delta_c_m_vs_1_experiments.m 批量运行 Delta_c (1 vs m) 实验
+% 
 % 批量 Delta_c (1 vs m) 实验脚本（简化版）
 % ------------------------------------------------------------
 % 按照指定的 N 列表依次调用 run_delta_c_m_vs_1_scan_parallel_with_N。

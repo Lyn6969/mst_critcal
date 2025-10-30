@@ -280,7 +280,7 @@ function params = default_simulation_parameters()
     params.fieldSize = 50;
     params.initDirection = pi / 4;
     params.useFixedField = true;
-    params.stabilization_steps = 200;
+    params.stabilization_steps = 100;
     params.forced_turn_duration = 200;
 end
 

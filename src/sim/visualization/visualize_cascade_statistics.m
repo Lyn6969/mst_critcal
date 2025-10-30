@@ -1,4 +1,5 @@
-﻿% 增强版级联统计可视化脚本
+% visualize_cascade_statistics.m 增强版级联统计可视化脚本
+% 增强版级联统计可视化脚本
 % 在run_external_pulse_test基础上增加级联统计信息的实时显示
 clc;
 clear;
@@ -33,7 +34,7 @@ params.angleNoiseIntensity = 0;   % 较小噪声便3
 % 于观察级联
 params.T_max = 500;                 % 最大仿真时间
 params.dt = 0.1;                    % 时间步长
-params.cj_threshold = 0.5;            % 激活阈值
+params.cj_threshold = 0.6;            % 激活阈值
 params.radius = 5;                  % 邻居查找半径
 params.deac_threshold = 0.1745;     % 取消激活阈值
 
@@ -43,7 +44,7 @@ params.initDirection = pi/4;        % 45度初始方向
 params.useFixedField = true;        % 启用固定场地模式
 
 % 外源激活参数
-params.stabilization_steps = 100;    % 稳定期
+params.stabilization_steps = 200;    % 稳定期
 params.forced_turn_duration = 200;   % 独立状态持续时间
 params.cascade_end_threshold = 5;   % 级联结束判断阈值
 
