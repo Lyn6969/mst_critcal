@@ -53,7 +53,7 @@ THRESHOLD_LINE_COLOR = [0.95, 0.75, 0.1];    % 阈值参考线颜色（金黄色
 mat_file = 'data.mat';  % 数据文件名
 % TODO: 根据实际结果目录更新以下路径
 mat_dir = fullfile('mst_critcal', 'data', 'experiments', 'delta_c_m_vs_1_scan', ...
-    '20250101_000000');  % 示例目录，请替换为真实时间戳
+    '20251030_233909');  % 示例目录，请替换为真实时间戳
 
 % 获取脚本所在目录和项目根目录（用于构建绝对路径）
 script_dir = fileparts(mfilename('fullpath'));  % 获取当前脚本所在目录

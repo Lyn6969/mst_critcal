@@ -10,8 +10,8 @@ clear;
 close all;
 addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 %% 参数配置
-N_values = [200, 400, 800];
-num_repeats = 5;
+N_values = 200;
+num_repeats = 50;
 total_experiments = numel(N_values) * num_repeats;
 
 script_dir = fileparts(mfilename('fullpath'));
