@@ -36,8 +36,8 @@ COLORBAR_LABEL_FONT_SIZE = 23;
 COLORBAR_LABEL_FONT_WEIGHT = 'Bold';
 
 % 数据文件（请根据实际结果路径修改）
-mat_file_m_vs_1 = fullfile('mst_critcal', 'data', 'experiments', 'delta_c_m_vs_1_scan', ...
-    '20251030_204718', 'data.mat');
+mat_file_m_vs_1 = fullfile('mst_critcal', 'data', 'experiments', 'batch_delta_c_m_vs_1', '20251101_003447',...
+    'N200_run14_20251101_051202', 'data.mat');
 
 % 输出文件名
 figure_names = { ...

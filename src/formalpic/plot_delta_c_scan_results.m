@@ -21,27 +21,24 @@ LABEL_FONT_SIZE = 12;           % 坐标轴标签字体大小（xlabel, ylabel�
 LABEL_FONT_WEIGHT = 'Bold';     % 坐标轴标签字体粗细 ('normal' 或 'bold')
 TICK_FONT_SIZE = 13;            % 坐标轴刻度字体大小
 TICK_FONT_WEIGHT = 'Bold';    % 坐标轴刻度字体粗细 ('normal' 或 'bold')
-LEGEND_FONT_SIZE = 15;          % 图例字体大小
-
-% 坐标轴刻度设置
-TICK_DIR = 'in';                % 刻度方向 ('in' 或 'out')
-
-% c1-c2 填充区域设置
-FILL_ALPHA = 0.8;               % c1-c2 之间填充区域的透明度 (0-1)
-FILL_COLOR = [0.5 0.5 0.5];     % 填充颜色（灰色）
-
+LEGEND_FONT_SIZE = 15;          % 图例字体大小sav 
 % 网格设置
 GRID_ON = 'off';             % 网格开关 ('on' 或 'off')
 GRID_ALPHA = 0.1;           % 网格透明度 (0-1)
 GRID_LINE_STYLE = '--';     % 网格线型 ('-' 实线, '--' 虚线, ':' 点线, '-.' 点划线)
+TICK_DIR = 'in';            % 刻度方向 ('in' 或 'out')
 
 % 图例设置
 LEGEND_LOCATION = 'northeast';  % 图例位置
 LEGEND_BOX = 'on';             % 图例边框 ('on' 或 'off')
 
+% 填充区域样式
+FILL_COLOR = [0.7, 0.7, 0.7];   % c1-c2 阴影填充颜色
+FILL_ALPHA = 0.25;              % 填充透明度
+
 %% 加载数据
 mat_file = 'data.mat';
-mat_path = 'mst_critcal\data\experiments\delta_c_m_vs_1_scan\20251030_204718\';
+mat_path = 'mst_critcal\data\experiments\batch_delta_c_m_vs_1\20251101_003447\N200_run14_20251101_051202\';
 
 % 获取项目根目录（用于转换为绝对路径）
 script_dir = fileparts(mfilename('fullpath'));
@@ -85,6 +82,7 @@ delta_pdf = fullfile(pic_dir, sprintf('%s_delta.pdf', mat_name));
 %% 先计算最优阈值（Δc 的峰值位置）
 [max_delta_c, max_idx] = max(delta_c);
 optimal_cj = thresholds(max_idx);
+fprintf('Δc 最大值 %.4f 对应的阈值 M_T = %.4f\n', max_delta_c, optimal_cj);
 
 %% 图1：级联规模对比
 fig1 = figure('Position', [100, 100, FIG_WIDTH, FIG_HEIGHT], 'Color', 'white');

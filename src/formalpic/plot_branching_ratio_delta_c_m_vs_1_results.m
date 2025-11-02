@@ -18,17 +18,17 @@
 % 作者：自动生成
 % 日期：2025年
 
-% 清理工作空间、命令窗口和关闭所有图形窗口
+% 清理工作空间、命令窗口和关闭所有图形窗口hp 
 clear; clc; close all;
 
 %% -------------------- 图像样式配置 --------------------
 % 图片尺寸设置（单位：像素）
 FIG_WIDTH = 400;      % 图片宽度
-FIG_HEIGHT = 200;     % 图片高度
+FIG_HEIGHT = 200;     % 图片高
 
 % 线条粗细设置
 LINE_WIDTH = 2.5;         % 数据曲线线宽
-AXIS_LINE_WIDTH = 1.5;    % 坐标轴框线线宽
+AXIS_LINE_WIDTH = 1.5;    % 坐标轴框线线
 
 % 字体样式设置
 FONT_NAME = 'Arial';           % 字体名称（全局）
@@ -47,13 +47,14 @@ TICK_DIR = 'in';              % 刻度方向 ('in' 或 'out')
 % 颜色设置
 BR_COLOR = [38, 94, 180] / 255;              % 分支比曲线颜色（蓝色）
 THRESHOLD_LINE_COLOR = [0.95, 0.75, 0.1];    % 阈值参考线颜色（金黄色）
+VERTICAL_LINE_COLOR = [0.3, 0.3, 0.3];       % 垂直参考线颜色（深灰色）
 
 %% -------------------- 数据路径配置 --------------------
 % 数据文件和目录路径设置
 mat_file = 'data.mat';  % 数据文件名
 % TODO: 根据实际结果目录更新以下路径
-mat_dir = fullfile('mst_critcal', 'data', 'experiments', 'delta_c_m_vs_1_scan', ...
-    '20251030_233909');  % 示例目录，请替换为真实时间戳
+mat_dir = fullfile('mst_critcal', 'data', 'experiments', 'batch_delta_c_m_vs_1', '20251101_003447',...
+    'N200_run14_20251101_051202');  % 示例目录，请替换为真实时间戳
 
 % 获取脚本所在目录和项目根目录（用于构建绝对路径）
 script_dir = fileparts(mfilename('fullpath'));  % 获取当前脚本所在目录
@@ -66,7 +67,7 @@ if ~isfile(mat_path_abs)
     error('结果文件不存在：%s', mat_path_abs);
 end
 
-% 加载数据文件中的 results 变量
+% 加载数据文件中的 results 变量gu 
 data = load(mat_path_abs, 'results');
 results = data.results;
 
@@ -93,6 +94,22 @@ end
 thresholds = results.cj_thresholds(:);       % 阈值数组（M_T值）
 mean_values = branching_mean(:, target_idx); % 目标初发个体数对应的平均分支比
 sem_values = branching_sem(:, target_idx);   % 目标初发个体数对应的分支比标准误差
+
+% 计算 M_T < 1 区间内最接近分支比 1 的阈值位置
+mt_mask = thresholds < 1;
+if any(mt_mask)
+    thresholds_lt1 = thresholds(mt_mask);
+    mean_lt1 = mean_values(mt_mask);
+    [~, min_idx_local] = min(abs(mean_lt1 - 1));
+    critical_mt = thresholds_lt1(min_idx_local);
+    ratio_at_critical = mean_lt1(min_idx_local);
+    diff_from_one = ratio_at_critical - 1;
+    fprintf('M_T < 1 区间内最接近分支比 1 的阈值: %.4f (对应分支比 %.4f, 差值 %.6f)\n', ...
+        critical_mt, ratio_at_critical, diff_from_one);
+else
+    critical_mt = NaN;
+    warning('未找到 M_T < 1 的有效样本，无法绘制垂直参考线。');
+end
 
 %% -------------------- 图像输出目录 --------------------
 % 设置图片输出目录
@@ -128,6 +145,11 @@ end
 
 % 在分支比等于1的位置绘制水平参考线（临界值）
 yline(ax, 1.0, '--', 'Color', THRESHOLD_LINE_COLOR, 'LineWidth', 2.0, 'HandleVisibility', 'off');
+
+% 绘制 M_T < 1 中最接近分支比 1 的竖直参考线
+if ~isnan(critical_mt)
+    xline(ax, critical_mt, '--', 'Color', VERTICAL_LINE_COLOR, 'LineWidth', 1.8, 'HandleVisibility', 'off');
+end
 
 % 设置坐标轴属性
 ax.FontName = FONT_NAME;           % 字体名称
