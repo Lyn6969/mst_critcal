@@ -36,7 +36,7 @@ LABEL_FONT_SIZE = 12;          % 坐标轴标签字体大小（xlabel, ylabel）
 LABEL_FONT_WEIGHT = 'Bold';    % 坐标轴标签字体粗细 ('normal' 或 'bold')
 TICK_FONT_SIZE = 13;           % 坐标轴刻度字体大小
 TICK_FONT_WEIGHT = 'Bold';     % 坐标轴刻度字体粗细 ('normal' 或 'bold')
-LEGEND_FONT_SIZE = 12;         % 图例字体大小
+LEGEND_FONT_SIZE = 12;         % 图例字体大小（保留参数，当前未使用）
 
 % 网格和刻度设置
 GRID_ON = 'off';              % 网格开关 ('on' 或 'off')
@@ -47,18 +47,18 @@ TICK_DIR = 'in';              % 刻度方向 ('in' 或 'out')
 % 颜色设置
 BR_COLOR = [38, 94, 180] / 255;              % 分支比曲线颜色（蓝色）
 THRESHOLD_LINE_COLOR = [0.95, 0.75, 0.1];    % 阈值参考线颜色（金黄色）
-VERTICAL_LINE_COLOR = [0.3, 0.3, 0.3];       % 垂直参考线颜色（深灰色）
+VERTICAL_LINE_COLOR = [0.85, 0, 0];          % 垂直参考线颜色（红色）
 
 %% -------------------- 数据路径配置 --------------------
 % 数据文件和目录路径设置
 mat_file = 'data.mat';  % 数据文件名
 % TODO: 根据实际结果目录更新以下路径
-mat_dir = fullfile('mst_critcal', 'data', 'experiments', 'batch_delta_c_m_vs_1', '20251101_003447',...
+mat_dir = fullfile( 'data', 'experiments', 'batch_delta_c_m_vs_1', '20251101_003447',...
     'N200_run14_20251101_051202');  % 示例目录，请替换为真实时间戳
 
 % 获取脚本所在目录和项目根目录（用于构建绝对路径）
 script_dir = fileparts(mfilename('fullpath'));  % 获取当前脚本所在目录
-project_root = fileparts(fileparts(fileparts(script_dir)));  % 向上三级获取项目根目录
+project_root = fileparts(fileparts(script_dir));  % 向上两级获取项目根目录
 
 % 构建数据文件的绝对路径
 mat_path_abs = fullfile(project_root, mat_dir, mat_file);
@@ -133,16 +133,6 @@ hold(ax, 'on');  % 保持当前图形，允许叠加绘制
 % 绘制分支比曲线
 plot(ax, thresholds, mean_values, 'LineWidth', LINE_WIDTH, 'Color', BR_COLOR);
 
-% 如果存在标准误差数据，绘制误差带（半透明填充区域）
-if ~all(isnan(sem_values))
-    % 构建误差带的x和y坐标（使用flipud实现闭合路径）
-    patch_x = [thresholds; flipud(thresholds)];
-    patch_y = [mean_values + sem_values; flipud(mean_values - sem_values)];
-    % 绘制半透明误差带
-    patch(ax, patch_x, patch_y, BR_COLOR, 'FaceAlpha', 0.15, ...
-        'EdgeColor', 'none', 'HandleVisibility', 'off');
-end
-
 % 在分支比等于1的位置绘制水平参考线（临界值）
 yline(ax, 1.0, '--', 'Color', THRESHOLD_LINE_COLOR, 'LineWidth', 2.0, 'HandleVisibility', 'off');
 
@@ -164,16 +154,12 @@ box(ax, 'on');                     % 显示坐标轴边框
 
 % 设置坐标轴标签
 xlabel(ax, 'M_T', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
-ylabel(ax, sprintf('Mean Branching Ratio (m=%d)', TARGET_PULSE), ...
+ylabel(ax, 'Avg. Branching Ratio', ...
     'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
 
 % 设置y轴范围（确保包含所有数据点和参考线）
 ylim_upper = max(max(mean_values + abs(sem_values)) * 1.1, 1.1);  % 上限为数据最大值的1.1倍或1.1的较大者
 ylim(ax, [0, ylim_upper]);  % y轴范围从0到计算的上限
-
-% 添加图例
-legend(ax, {sprintf('m = %d', TARGET_PULSE)}, 'Location', 'northeast', ...
-    'FontName', FONT_NAME, 'FontSize', LEGEND_FONT_SIZE, 'Box', 'off');
 
 hold(ax, 'off');  % 结束图形保持状态
 

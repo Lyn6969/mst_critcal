@@ -108,7 +108,7 @@ box(ax, 'on');
 
 % 设置坐标轴标签
 xlabel(ax, 'M_T', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
-ylabel(ax, 'Mean Branching Ratio', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
+ylabel(ax, 'Avg. Branching Ratio', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
 
 % 设置y轴范围：下限为0，上限为最大值的1.1倍或1.1中的较大值
 ylim_upper = max(max(b_mean) * 1.1, 1.1);

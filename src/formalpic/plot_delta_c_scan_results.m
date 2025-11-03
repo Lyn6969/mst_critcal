@@ -36,6 +36,9 @@ LEGEND_BOX = 'on';             % 图例边框 ('on' 或 'off')
 FILL_COLOR = [0.7, 0.7, 0.7];   % c1-c2 阴影填充颜色
 FILL_ALPHA = 0.25;              % 填充透明度
 
+% 颜色配置
+DELTA_COLOR = [38, 94, 180] / 255;  % Δc 曲线及级联曲线颜色
+
 %% 加载数据
 mat_file = 'data.mat';
 mat_path = 'mst_critcal\data\experiments\batch_delta_c_m_vs_1\20251101_003447\N200_run14_20251101_051202\';
@@ -95,10 +98,10 @@ fill([thresholds fliplr(thresholds)], [c1_mean fliplr(c2_mean)], FILL_COLOR, ...
     'FaceAlpha', FILL_ALPHA, 'EdgeColor', 'none', 'HandleVisibility', 'off');
 
 % c1 曲线（蓝色实线）
-plot(ax1, thresholds, c1_mean, 'Color', [0 0 1], 'LineWidth', LINE_WIDTH, 'DisplayName', 'c_1');
+plot(ax1, thresholds, c1_mean, 'Color', DELTA_COLOR, 'LineWidth', LINE_WIDTH, 'DisplayName', 'c_1');
 
 % c2 曲线（蓝色虚线）
-plot(ax1, thresholds, c2_mean, '--', 'Color', [0 0 1], 'LineWidth', LINE_WIDTH, 'DisplayName', 'c_2');
+plot(ax1, thresholds, c2_mean, '--', 'Color', DELTA_COLOR, 'LineWidth', LINE_WIDTH, 'DisplayName', 'c_2');
 
 % 先设置坐标轴属性（包括刻度字体粗细）
 ax1.FontName = FONT_NAME;
@@ -130,8 +133,7 @@ ax2 = axes('Parent', fig2);
 hold(ax2, 'on');
 
 % Delta C 曲线
-delta_color = [38 94 180] / 255;
-plot(ax2, thresholds, delta_c, 'Color', delta_color, 'LineWidth', LINE_WIDTH);
+plot(ax2, thresholds, delta_c, 'Color', DELTA_COLOR, 'LineWidth', LINE_WIDTH);
 % 峰值位置的红色虚线（不显示在图例中）
 xline(ax2, optimal_cj, '--', 'Color', [0.85 0 0], 'LineWidth', 2, 'HandleVisibility', 'off');
 
