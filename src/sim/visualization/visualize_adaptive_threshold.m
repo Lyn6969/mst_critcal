@@ -71,9 +71,10 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
     sim.resetCascadeTracking();
     sim.initializeParticles();
 
-    fig = figure('Name', '自适应阈值响应演示', 'Color', 'white', 'Position', [80, 120, 720, 620]);
+    fig = figure('Name', '自适应阈值响应演示', 'Color', 'white', 'Position', [80, 120, 760, 780]);
+    tl = tiledlayout(fig, 3, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
 
-    ax_particles = subplot(2,1,1, 'Parent', fig);
+    ax_particles = nexttile(tl, 1);
     scatter_plot = scatter(ax_particles, sim.positions(:,1), sim.positions(:,2), 36, 'filled');
     set(scatter_plot, 'CData', repmat([0.75 0.75 0.75], params.N, 1));
     hold(ax_particles, 'on');
@@ -87,7 +88,7 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
     xlabel(ax_particles, 'X');
     ylabel(ax_particles, 'Y');
 
-    ax_threshold = subplot(2,1,2, 'Parent', fig);
+    ax_threshold = nexttile(tl, 2);
     hold(ax_threshold, 'on');
     threshold_line = plot(ax_threshold, NaN, NaN, '-', 'LineWidth', 1.6, 'Color', [0.9 0.5 0.2]);
     saliency_line = plot(ax_threshold, NaN, NaN, '--', 'LineWidth', 1.2, 'Color', [0.4 0.4 0.4]);
@@ -98,11 +99,53 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
     title(ax_threshold, '自适应阈值与显著性方差演化');
     grid(ax_threshold, 'on');
 
+    ax_counts = nexttile(tl, 3);
+    hold(ax_counts, 'on');
+    low_line = plot(ax_counts, NaN, NaN, '-', 'LineWidth', 1.6, 'Color', [0.3 0.6 0.95]);
+    high_line = plot(ax_counts, NaN, NaN, '-', 'LineWidth', 1.6, 'Color', [0.85 0.2 0.2]);
+    hold(ax_counts, 'off');
+    xlabel(ax_counts, '时间步');
+    ylabel(ax_counts, '个体数量');
+    legend(ax_counts, {'低阈值', '高阈值'}, 'Location', 'best');
+    title(ax_counts, '处于阈值下限/上限的个体数量');
+    grid(ax_counts, 'on');
+    ylim(ax_counts, [0, params.N]);
+
     V_history = zeros(params.T_max + 1, 2);
     V_history(1, :) = compute_average_velocity(sim.theta, params.v0);
     projection_history = zeros(params.T_max + 1, num_angles);
     threshold_history = zeros(params.T_max + 1, 1);
     saliency_history = zeros(params.T_max + 1, 1);
+    count_low_history = zeros(params.T_max + 1, 1);
+    count_high_history = zeros(params.T_max + 1, 1);
+
+    adaptive_cfg = [];
+    if isfield(params, 'adaptiveThresholdConfig') && ~isempty(params.adaptiveThresholdConfig)
+        adaptive_cfg = params.adaptiveThresholdConfig;
+    end
+    if ~isempty(adaptive_cfg)
+        low_bound = adaptive_cfg.cj_low;
+        high_bound = adaptive_cfg.cj_high;
+    else
+        low_bound = -inf;
+        high_bound = inf;
+    end
+    thr_eps = 1e-6;
+
+    if sim.useAdaptiveThreshold && ~isempty(sim.cj_threshold_dynamic)
+        threshold_history(1) = mean(sim.cj_threshold_dynamic);
+        saliency_history(1) = mean(sim.local_saliency_state);
+        count_low_history(1) = sum(sim.cj_threshold_dynamic <= low_bound + thr_eps);
+        count_high_history(1) = sum(sim.cj_threshold_dynamic >= high_bound - thr_eps);
+    else
+        threshold_history(1) = sim.cj_threshold;
+        saliency_history(1) = 0;
+        count_low_history(1) = params.N * (sim.cj_threshold <= low_bound + thr_eps);
+        count_high_history(1) = params.N * (sim.cj_threshold >= high_bound - thr_eps);
+    end
+
+    set(low_line, 'XData', 0, 'YData', count_low_history(1));
+    set(high_line, 'XData', 0, 'YData', count_high_history(1));
 
     triggered = false;
     n_vectors = [];
@@ -112,8 +155,16 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
         sim.step();
         V_history(t + 1, :) = compute_average_velocity(sim.theta, params.v0);
 
-        threshold_history(t + 1) = mean(sim.cj_threshold_dynamic);
-        saliency_history(t + 1) = mean(sim.local_saliency_state);
+        if sim.useAdaptiveThreshold && ~isempty(sim.cj_threshold_dynamic)
+            thresholds_current = sim.cj_threshold_dynamic;
+            saliency_history(t + 1) = mean(sim.local_saliency_state);
+        else
+            thresholds_current = repmat(sim.cj_threshold, params.N, 1);
+            saliency_history(t + 1) = 0;
+        end
+        threshold_history(t + 1) = mean(thresholds_current);
+        count_low_history(t + 1) = sum(thresholds_current <= low_bound + thr_eps);
+        count_high_history(t + 1) = sum(thresholds_current >= high_bound - thr_eps);
 
         if ~triggered && sim.external_pulse_triggered
             triggered = true;
@@ -142,6 +193,8 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
 
             set(threshold_line, 'XData', 0:t, 'YData', threshold_history(1:t+1));
             set(saliency_line, 'XData', 0:t, 'YData', saliency_history(1:t+1));
+            set(low_line, 'XData', 0:t, 'YData', count_low_history(1:t+1));
+            set(high_line, 'XData', 0:t, 'YData', count_high_history(1:t+1));
 
             drawnow limitrate;
         end
@@ -202,17 +255,36 @@ function result = run_visual_persistence(params, cfg)
     % 新增：追踪阈值和显著性方差历史
     threshold_history = zeros(T + 1, 1);
     saliency_history = zeros(T + 1, 1);
+    count_low_history = zeros(T + 1, 1);
+    count_high_history = zeros(T + 1, 1);
+
+    adaptive_cfg = [];
+    if isfield(params_pers, 'adaptiveThresholdConfig') && ~isempty(params_pers.adaptiveThresholdConfig)
+        adaptive_cfg = params_pers.adaptiveThresholdConfig;
+        low_bound = adaptive_cfg.cj_low;
+        high_bound = adaptive_cfg.cj_high;
+    else
+        low_bound = -inf;
+        high_bound = inf;
+    end
+    thr_eps = 1e-6;
+
     if sim.useAdaptiveThreshold && ~isempty(sim.cj_threshold_dynamic)
         threshold_history(1) = mean(sim.cj_threshold_dynamic);
         saliency_history(1) = mean(sim.local_saliency_state);
+        count_low_history(1) = sum(sim.cj_threshold_dynamic <= low_bound + thr_eps);
+        count_high_history(1) = sum(sim.cj_threshold_dynamic >= high_bound - thr_eps);
     else
         threshold_history(1) = sim.cj_threshold;
         saliency_history(1) = 0;
+        count_low_history(1) = params.N * (sim.cj_threshold <= low_bound + thr_eps);
+        count_high_history(1) = params.N * (sim.cj_threshold >= high_bound - thr_eps);
     end
 
-    fig = figure('Name', '自适应阈值持久性演示', 'Color', 'white', 'Position', [840, 120, 720, 880]);
+    fig = figure('Name', '自适应阈值持久性演示', 'Color', 'white', 'Position', [840, 120, 760, 1000]);
+    tl = tiledlayout(fig, 4, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
 
-    ax_particles = subplot(3,1,1, 'Parent', fig);
+    ax_particles = nexttile(tl, 1);
     scatter_plot = scatter(ax_particles, sim.positions(:,1), sim.positions(:,2), 36, 'filled');
     hold(ax_particles, 'on');
     quiver_plot = quiver(ax_particles, sim.positions(:,1), sim.positions(:,2), cos(sim.theta), sin(sim.theta), 0.35, ...
@@ -227,7 +299,7 @@ function result = run_visual_persistence(params, cfg)
     title(ax_particles, '粒子状态与质心轨迹');
 
     % 新增：阈值和显著性方差演化图
-    ax_threshold = subplot(3,1,2, 'Parent', fig);
+    ax_threshold = nexttile(tl, 2);
     hold(ax_threshold, 'on');
     threshold_line = plot(ax_threshold, time_vec, threshold_history, '-', 'LineWidth', 1.6, 'Color', [0.9 0.5 0.2]);
     saliency_line = plot(ax_threshold, time_vec, saliency_history, '--', 'LineWidth', 1.2, 'Color', [0.4 0.4 0.4]);
@@ -238,7 +310,19 @@ function result = run_visual_persistence(params, cfg)
     legend(ax_threshold, {'平均阈值', '显著性方差'}, 'Location', 'best');
     title(ax_threshold, '自适应阈值与显著性方差演化');
 
-    ax_msd = subplot(3,1,3, 'Parent', fig);
+    ax_counts = nexttile(tl, 3);
+    hold(ax_counts, 'on');
+    low_line = plot(ax_counts, time_vec, count_low_history, '-', 'LineWidth', 1.6, 'Color', [0.3 0.6 0.95]);
+    high_line = plot(ax_counts, time_vec, count_high_history, '-', 'LineWidth', 1.6, 'Color', [0.85 0.2 0.2]);
+    hold(ax_counts, 'off');
+    grid(ax_counts, 'on');
+    xlabel(ax_counts, '时间 (s)');
+    ylabel(ax_counts, '个体数量');
+    legend(ax_counts, {'低阈值', '高阈值'}, 'Location', 'best');
+    title(ax_counts, '处于阈值下限/上限的个体数量');
+    ylim(ax_counts, [0, params.N]);
+
+    ax_msd = nexttile(tl, 4);
     msd_line = plot(ax_msd, time_vec, msd_history, '-', 'LineWidth', 1.4, 'Color', [0.4 0.4 0.4]);
     hold(ax_msd, 'on');
     fit_line = plot(ax_msd, NaN, NaN, '--', 'LineWidth', 1.6, 'Color', [0.85 0.2 0.2]);
@@ -263,10 +347,14 @@ function result = run_visual_persistence(params, cfg)
         if sim.useAdaptiveThreshold && ~isempty(sim.cj_threshold_dynamic)
             threshold_history(step_idx + 1) = mean(sim.cj_threshold_dynamic);
             saliency_history(step_idx + 1) = mean(sim.local_saliency_state);
+            thresholds_current = sim.cj_threshold_dynamic;
         else
             threshold_history(step_idx + 1) = sim.cj_threshold;
             saliency_history(step_idx + 1) = 0;
+            thresholds_current = repmat(sim.cj_threshold, params.N, 1);
         end
+        count_low_history(step_idx + 1) = sum(thresholds_current <= low_bound + thr_eps);
+        count_high_history(step_idx + 1) = sum(thresholds_current >= high_bound - thr_eps);
 
         if mod(step_idx, 5) == 0 || step_idx == T
             colors = repmat([0.7 0.7 0.7], params.N, 1);
@@ -282,6 +370,8 @@ function result = run_visual_persistence(params, cfg)
             % 新增：更新阈值和显著性方差曲线
             set(threshold_line, 'XData', time_vec(1:step_idx+1), 'YData', threshold_history(1:step_idx+1));
             set(saliency_line, 'XData', time_vec(1:step_idx+1), 'YData', saliency_history(1:step_idx+1));
+            set(low_line, 'XData', time_vec(1:step_idx+1), 'YData', count_low_history(1:step_idx+1));
+            set(high_line, 'XData', time_vec(1:step_idx+1), 'YData', count_high_history(1:step_idx+1));
 
             set(msd_line, 'YData', msd_history);
             drawnow limitrate;
