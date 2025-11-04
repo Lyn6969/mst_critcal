@@ -36,8 +36,8 @@ COLORBAR_LABEL_FONT_SIZE = 23;
 COLORBAR_LABEL_FONT_WEIGHT = 'Bold';
 
 % 数据文件（请根据实际结果路径修改）
-mat_file_m_vs_1 = fullfile('mst_critcal', 'data', 'experiments', 'batch_delta_c_m_vs_1', '20251101_003447',...
-    'N200_run14_20251101_051202', 'data.mat');
+mat_file_m_vs_1 = fullfile('mst_critcal', 'data', 'experiments', 'batch_delta_c_m_vs_1', '20251102_115933',...
+    'N400_run15_20251103_063218', 'data.mat');
 
 % 输出文件名
 figure_names = { ...
@@ -158,6 +158,7 @@ if isfinite(peak_value)
     [peak_row, ~] = ind2sub(size(delta_c_mm1), peak_linear_idx);
     peak_threshold = thresholds(peak_row);
     xline(ax3, peak_threshold, '--', 'Color', [0.85 0 0], 'LineWidth', 2.5);
+    fprintf('Δc (m vs m+1) 最大值 %.4f 对应的阈值 M_T = %.4f\n', peak_value, peak_threshold);
 end
 
 configure_axes(ax3, 'M_T', 'm vs (m+1) Sensitivity', GRID_ON, GRID_ALPHA, GRID_LINE_STYLE, TICK_DIR);

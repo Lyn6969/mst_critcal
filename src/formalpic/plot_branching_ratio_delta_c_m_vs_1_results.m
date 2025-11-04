@@ -138,7 +138,7 @@ yline(ax, 1.0, '--', 'Color', THRESHOLD_LINE_COLOR, 'LineWidth', 2.0, 'HandleVis
 
 % 绘制 M_T < 1 中最接近分支比 1 的竖直参考线
 if ~isnan(critical_mt)
-    xline(ax, critical_mt, '--', 'Color', VERTICAL_LINE_COLOR, 'LineWidth', 1.8, 'HandleVisibility', 'off');
+    xline(ax, critical_mt, '--', 'Color', VERTICAL_LINE_COLOR, 'LineWidth', 2.0, 'HandleVisibility', 'off');
 end
 
 % 设置坐标轴属性
