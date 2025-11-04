@@ -1,4 +1,4 @@
-4% visualize_adaptive_threshold 自适应阈值机制演示脚本
+% visualize_adaptive_threshold 自适应阈值机制演示脚本
 % =========================================================================
 % 功能：
 %   - 启用邻域运动显著性方差驱动的自适应阈值，直接观察单次响应过程。
@@ -44,7 +44,7 @@ adaptive_cfg.include_self = true;
 params.adaptiveThresholdConfig = adaptive_cfg;
 
 pers_cfg = struct();
-pers_cfg.burn_in_ratio = 0.25;
+pers_cfg.burn_in_ratio = 0.5;
 pers_cfg.min_fit_points = 40;
 pers_cfg.min_diffusion = 1e-4;
 

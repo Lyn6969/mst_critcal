@@ -38,7 +38,7 @@ params.cj_threshold = 1.5;
 params.fieldSize = 50;
 params.initDirection = pi/4;
 params.useFixedField = true;
-params.stabilization_steps = 100;
+params.stabilization_steps = 200;
 params.forced_turn_duration = 200;
 params.useAdaptiveThreshold = true;
 
@@ -49,7 +49,7 @@ adaptive_cfg.include_self = false;
 % saliency_threshold 由扫描循环内设置
 
 pers_cfg = struct();
-pers_cfg.burn_in_ratio = 0.25;
+pers_cfg.burn_in_ratio = 0.5;
 pers_cfg.min_fit_points = 40;
 pers_cfg.min_diffusion = 1e-4;
 
@@ -124,7 +124,7 @@ T = table(threshold_list', R_mean, R_std, P_mean, P_std, P_mean_norm, trigger_fa
 disp(T);
 
 %% 6. 绘图 ----------------------------------------------------------------------
-figure('Color', 'white', 'Position', [180, 120, 720, 540]);
+fig_line = figure('Color', 'white', 'Position', [180, 120, 720, 540]);
 yyaxis left;
 plot(threshold_list, R_mean, 'o-', 'LineWidth', 1.4, 'DisplayName', '响应性 R');
 ylabel('响应性 R');
@@ -139,7 +139,7 @@ grid on;
 legend('Location', 'best');
 
 %% 6.2 R-P 散点图（颜色表示阈值）
-figure('Color', 'white', 'Position', [220, 160, 620, 480]);
+fig_scatter = figure('Color', 'white', 'Position', [220, 160, 620, 480]);
 scatter(R_mean, P_mean_norm, 80, threshold_list, 'filled');
 hold on;
 colormap('turbo');
@@ -180,8 +180,8 @@ png_file_scatter = fullfile(results_dir, sprintf('saliency_scan_scatter_%s.png',
 save(mat_file, 'threshold_list', 'R_mean', 'R_std', 'P_mean', 'P_std', 'P_mean_norm', ...
     'P_std_norm', 'max_P', 'fit_spline', 'trigger_failures', 'params', 'adaptive_cfg', 'pers_cfg', ...
     'runs_per_threshold', 'base_seed');
-print(png_file, '-dpng', '-r200');
-print(png_file_scatter, '-dpng', '-r200');
+print(fig_line, png_file, '-dpng', '-r200');
+print(fig_scatter, png_file_scatter, '-dpng', '-r200');
 
 fprintf('结果已保存: %s\n', mat_file);
 fprintf('图像已保存: %s\n', png_file);

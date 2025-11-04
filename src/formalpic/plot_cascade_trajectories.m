@@ -8,7 +8,7 @@
 clear; clc; close all;
 
 %% -------------------- 可调参数 --------------------
-CJ_THRESHOLD = 0.6;              % 运动显著性阈值（可根据需要调整）
+CJ_THRESHOLD = 0.7;              % 运动显著性阈值（可根据需要调整）
 RNG_SEED_C1 = 2025;              % c1 实验随机数种子
 RNG_SEED_C2 = 3025;              % c2 实验随机数种子
 EXTRA_STEPS_AFTER_CASCADE = 20;  % 级联完成后继续仿真的步数（保证位置稳定）
