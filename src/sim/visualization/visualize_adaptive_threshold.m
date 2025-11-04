@@ -1,4 +1,4 @@
-% visualize_adaptive_threshold 自适应阈值机制演示脚本
+4% visualize_adaptive_threshold 自适应阈值机制演示脚本
 % =========================================================================
 % 功能：
 %   - 启用邻域运动显著性方差驱动的自适应阈值，直接观察单次响应过程。
@@ -24,7 +24,7 @@ params.rho = 1;
 params.v0 = 1;
 params.angleUpdateParameter = 10;
 params.angleNoiseIntensity = 0.05;
-params.T_max = 600;
+params.T_max = 400;
 params.dt = 0.1;
 params.radius = 5;
 params.deac_threshold = 0.1745;
@@ -33,7 +33,7 @@ params.fieldSize = 50;
 params.initDirection = pi/4;
 params.useFixedField = true;
 params.stabilization_steps = 200;
-params.forced_turn_duration = 400;
+params.forced_turn_duration = 200;
 params.useAdaptiveThreshold = true;
 
 adaptive_cfg = struct();
@@ -102,14 +102,12 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
     ax_counts = nexttile(tl, 3);
     hold(ax_counts, 'on');
     low_line = plot(ax_counts, NaN, NaN, '-', 'LineWidth', 1.6, 'Color', [0.3 0.6 0.95]);
-    high_line = plot(ax_counts, NaN, NaN, '-', 'LineWidth', 1.6, 'Color', [0.85 0.2 0.2]);
     hold(ax_counts, 'off');
     xlabel(ax_counts, '时间步');
-    ylabel(ax_counts, '个体数量');
-    legend(ax_counts, {'低阈值', '高阈值'}, 'Location', 'best');
-    title(ax_counts, '处于阈值下限/上限的个体数量');
+    ylabel(ax_counts, '低阈值占比');
+    title(ax_counts, '处于阈值下限的个体占比');
     grid(ax_counts, 'on');
-    ylim(ax_counts, [0, params.N]);
+    ylim(ax_counts, [0, 0.25]);
 
     V_history = zeros(params.T_max + 1, 2);
     V_history(1, :) = compute_average_velocity(sim.theta, params.v0);
@@ -117,7 +115,6 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
     threshold_history = zeros(params.T_max + 1, 1);
     saliency_history = zeros(params.T_max + 1, 1);
     count_low_history = zeros(params.T_max + 1, 1);
-    count_high_history = zeros(params.T_max + 1, 1);
 
     adaptive_cfg = [];
     if isfield(params, 'adaptiveThresholdConfig') && ~isempty(params.adaptiveThresholdConfig)
@@ -136,16 +133,13 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
         threshold_history(1) = mean(sim.cj_threshold_dynamic);
         saliency_history(1) = mean(sim.local_saliency_state);
         count_low_history(1) = sum(sim.cj_threshold_dynamic <= low_bound + thr_eps);
-        count_high_history(1) = sum(sim.cj_threshold_dynamic >= high_bound - thr_eps);
     else
         threshold_history(1) = sim.cj_threshold;
         saliency_history(1) = 0;
         count_low_history(1) = params.N * (sim.cj_threshold <= low_bound + thr_eps);
-        count_high_history(1) = params.N * (sim.cj_threshold >= high_bound - thr_eps);
     end
 
-    set(low_line, 'XData', 0, 'YData', count_low_history(1));
-    set(high_line, 'XData', 0, 'YData', count_high_history(1));
+    set(low_line, 'XData', 0, 'YData', count_low_history(1) / params.N);
 
     triggered = false;
     n_vectors = [];
@@ -164,8 +158,6 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
         end
         threshold_history(t + 1) = mean(thresholds_current);
         count_low_history(t + 1) = sum(thresholds_current <= low_bound + thr_eps);
-        count_high_history(t + 1) = sum(thresholds_current >= high_bound - thr_eps);
-
         if ~triggered && sim.external_pulse_triggered
             triggered = true;
             t_start = t;
@@ -193,8 +185,10 @@ function result = run_visual_responsiveness(params, num_angles, time_vec)
 
             set(threshold_line, 'XData', 0:t, 'YData', threshold_history(1:t+1));
             set(saliency_line, 'XData', 0:t, 'YData', saliency_history(1:t+1));
-            set(low_line, 'XData', 0:t, 'YData', count_low_history(1:t+1));
-            set(high_line, 'XData', 0:t, 'YData', count_high_history(1:t+1));
+            ratios = count_low_history(1:t+1) / params.N;
+            set(low_line, 'XData', 0:t, 'YData', ratios);
+            ymax = max(ratios);
+            ylim(ax_counts, [0, 0.25]);
 
             drawnow limitrate;
         end
@@ -256,7 +250,6 @@ function result = run_visual_persistence(params, cfg)
     threshold_history = zeros(T + 1, 1);
     saliency_history = zeros(T + 1, 1);
     count_low_history = zeros(T + 1, 1);
-    count_high_history = zeros(T + 1, 1);
 
     adaptive_cfg = [];
     if isfield(params_pers, 'adaptiveThresholdConfig') && ~isempty(params_pers.adaptiveThresholdConfig)
@@ -273,12 +266,10 @@ function result = run_visual_persistence(params, cfg)
         threshold_history(1) = mean(sim.cj_threshold_dynamic);
         saliency_history(1) = mean(sim.local_saliency_state);
         count_low_history(1) = sum(sim.cj_threshold_dynamic <= low_bound + thr_eps);
-        count_high_history(1) = sum(sim.cj_threshold_dynamic >= high_bound - thr_eps);
     else
         threshold_history(1) = sim.cj_threshold;
         saliency_history(1) = 0;
         count_low_history(1) = params.N * (sim.cj_threshold <= low_bound + thr_eps);
-        count_high_history(1) = params.N * (sim.cj_threshold >= high_bound - thr_eps);
     end
 
     fig = figure('Name', '自适应阈值持久性演示', 'Color', 'white', 'Position', [840, 120, 760, 1000]);
@@ -312,15 +303,13 @@ function result = run_visual_persistence(params, cfg)
 
     ax_counts = nexttile(tl, 3);
     hold(ax_counts, 'on');
-    low_line = plot(ax_counts, time_vec, count_low_history, '-', 'LineWidth', 1.6, 'Color', [0.3 0.6 0.95]);
-    high_line = plot(ax_counts, time_vec, count_high_history, '-', 'LineWidth', 1.6, 'Color', [0.85 0.2 0.2]);
+    low_line = plot(ax_counts, time_vec, count_low_history / params.N, '-', 'LineWidth', 1.6, 'Color', [0.3 0.6 0.95]);
     hold(ax_counts, 'off');
     grid(ax_counts, 'on');
     xlabel(ax_counts, '时间 (s)');
-    ylabel(ax_counts, '个体数量');
-    legend(ax_counts, {'低阈值', '高阈值'}, 'Location', 'best');
-    title(ax_counts, '处于阈值下限/上限的个体数量');
-    ylim(ax_counts, [0, params.N]);
+    ylabel(ax_counts, '低阈值占比');
+    title(ax_counts, '处于阈值下限的个体占比');
+    ylim(ax_counts, [0, 0.25]);
 
     ax_msd = nexttile(tl, 4);
     msd_line = plot(ax_msd, time_vec, msd_history, '-', 'LineWidth', 1.4, 'Color', [0.4 0.4 0.4]);
@@ -354,7 +343,7 @@ function result = run_visual_persistence(params, cfg)
             thresholds_current = repmat(sim.cj_threshold, params.N, 1);
         end
         count_low_history(step_idx + 1) = sum(thresholds_current <= low_bound + thr_eps);
-        count_high_history(step_idx + 1) = sum(thresholds_current >= high_bound - thr_eps);
+        ratios_low = count_low_history(1:step_idx+1) / params.N;
 
         if mod(step_idx, 5) == 0 || step_idx == T
             colors = repmat([0.7 0.7 0.7], params.N, 1);
@@ -370,8 +359,8 @@ function result = run_visual_persistence(params, cfg)
             % 新增：更新阈值和显著性方差曲线
             set(threshold_line, 'XData', time_vec(1:step_idx+1), 'YData', threshold_history(1:step_idx+1));
             set(saliency_line, 'XData', time_vec(1:step_idx+1), 'YData', saliency_history(1:step_idx+1));
-            set(low_line, 'XData', time_vec(1:step_idx+1), 'YData', count_low_history(1:step_idx+1));
-            set(high_line, 'XData', time_vec(1:step_idx+1), 'YData', count_high_history(1:step_idx+1));
+            set(low_line, 'XData', time_vec(1:step_idx+1), 'YData', ratios_low);
+            ylim(ax_counts, [0, 0.25]);
 
             set(msd_line, 'YData', msd_history);
             drawnow limitrate;

@@ -29,7 +29,7 @@ base_common.rho = 1;
 base_common.v0 = 1;
 base_common.angleUpdateParameter = 10;
 base_common.angleNoiseIntensity = 0.05;
-base_common.T_max = 600;                        % 最大时间步
+base_common.T_max = 400;                        % 最大时间步
 base_common.dt = 0.1;
 base_common.radius = 5;                         % 感知半径
 base_common.deac_threshold = 0.1745;            % 失活阈值（10度）
@@ -41,11 +41,11 @@ base_common.useFixedField = true;
 % 响应性实验参数
 resp_params = base_common;
 resp_params.stabilization_steps = 200;          % 稳定化步数
-resp_params.forced_turn_duration = 400;         % 强制转向持续时长
+resp_params.forced_turn_duration = 200;         % 强制转向持续时长
 
 % 持久性实验参数
 pers_params = base_common;
-pers_params.T_max = 600;
+pers_params.T_max = 400;
 
 % 实验设置
 cj_thresholds_fixed = 0.0:0.1:5.0;              % 固定阈值扫描范围（51个点）
