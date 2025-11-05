@@ -19,7 +19,8 @@
       "Bash(done)",
       "Bash(dir:*)",
       "Bash(git push:*)",
-      "Bash(matlab:*)"
+      "Bash(matlab:*)",
+      "Bash(git config:*)"
     ],
     "deny": [],
     "ask": []
