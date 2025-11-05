@@ -45,7 +45,7 @@ base_params.rho = 1;                       % 粒子密度参数
 base_params.v0 = 1;                        % 粒子基础速度
 base_params.angleUpdateParameter = 10;     % 角度更新参数，影响方向调整速度
 base_params.angleNoiseIntensity = 0.1;     % 角度噪声强度，将被扫描参数覆盖
-base_params.T_max = 800;                   % 最大仿真步数，影响数据采集长度
+base_params.T_max = 400;                   % 最大仿真步数，影响数据采集长度
 base_params.dt = 0.1;                      % 时间步长，影响仿真精度和计算量
 base_params.radius = 5;                    % 粒子相互作用半径
 base_params.deac_threshold = 0.1745;       % 失活阈值(弧度)，约10度
@@ -55,8 +55,8 @@ base_params.initDirection = pi/4;          % 初始方向(45度)
 base_params.useFixedField = true;          % 是否使用固定边界场域
 
 % 参数扫描范围设置 (可按需调整步长与范围)
-cj_thresholds = 0.0:0.1:6.0;               % 运动显著性阈值扫描范围：从0到6，步长0.1
-noise_levels = 0.01:0.01:1.0;               % 角度噪声强度扫描范围：从0到1，步长0.01
+cj_thresholds = 0.0:0.1:5.0;               % 运动显著性阈值扫描范围：从0到6，步长0.1
+noise_levels = 0.0:0.01:1.0;               % 角度噪声强度扫描范围：从0到1，步长0.01
 
 % 显示扫描参数信息
 fprintf('扫描的 cj_threshold 个数: %d\n', numel(cj_thresholds));
