@@ -33,8 +33,8 @@ fprintf('=================================================\n\n');
 config = struct();
 config.num_runs_per_setting = 50;          % 每组参数的重复次数，增加可提高统计可靠性
 config.enable_parallel = true;             % 默认开启并行计算 (主循环使用 parfor)，大幅提升计算效率
-config.desired_workers = [];               % 并行工作进程数量，为空则沿用现有并行池设置
-config.burn_in_ratio = 0.2;                % 拟合扩散系数时丢弃的前期比例，避免初始瞬态影响
+config.desired_workers = 200;               % 并行工作进程数量，为空则沿用现有并行池设置
+config.burn_in_ratio = 0.5;                % 拟合扩散系数时丢弃的前期比例，避免初始瞬态影响
 config.min_diffusion = 1e-3;               % 扩散系数的下限，防止数值异常
 config.min_fit_points = 30;                % 线性拟合所需的最少数据点数
 
@@ -56,7 +56,7 @@ base_params.useFixedField = true;          % 是否使用固定边界场域
 
 % 参数扫描范围设置 (可按需调整步长与范围)
 cj_thresholds = 0.0:0.1:5.0;               % 运动显著性阈值扫描范围：从0到6，步长0.1
-noise_levels = 0.0:0.01:1.0;               % 角度噪声强度扫描范围：从0到1，步长0.01
+noise_levels = 0.0:0.0025:0.125;             % 角度噪声强度扫描范围：从0到1，步长0.01
 
 % 显示扫描参数信息
 fprintf('扫描的 cj_threshold 个数: %d\n', numel(cj_thresholds));

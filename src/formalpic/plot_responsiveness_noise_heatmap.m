@@ -30,7 +30,7 @@ TICK_DIR = 'in';          % 刻度方向 ('in' 或 'out')
 SMOOTHING_FACTOR = 10;     % 网格细分倍数 (>1 时启用插值平滑)
 SMOOTHING_METHOD = 'makima'; % 插值方法（'linear'、'spline'、'makima' 等）
 CONTOUR_LEVELS = 40;      % 等高线层数，数值越大视觉越平滑
-REFERENCE_LEVELS = [0.8]; % 需要强调的 R 等值线
+REFERENCE_LEVELS = [ 0.8]; % 需要强调的 R 等值线
 REFERENCE_LINE_WIDTH = 2;    % 等值线线宽
 REFERENCE_LABEL_FONT_SIZE = 12; % 等值线标签字体大小
 REFERENCE_LABEL_FONT_WEIGHT = 'Bold';
@@ -41,7 +41,7 @@ REFERENCE_LABEL_SPACING = 300;  % 等值线标签间距控制
 % TODO: 按实际结果路径修改以下目录与文件名
 mat_file = 'results.mat';  % 数据文件名
 mat_dir = fullfile('data', 'experiments', 'responsiveness_noise_cj_scan', ...
-    '20251105_001140');  % 示例目录，请根据实际时间戳修改
+    '20251105_214434');  % 示例目录，请根据实际时间戳修改
 
 % 获取脚本所在目录的绝对路径
 script_dir = fileparts(mfilename('fullpath'));
