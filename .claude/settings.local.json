@@ -20,7 +20,11 @@
       "Bash(dir:*)",
       "Bash(git push:*)",
       "Bash(matlab:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(ssh:*)",
+      "Bash(ssh-keyscan:*)",
+      "Bash(~/.ssh/known_hosts)",
+      "Bash(/c/Program Files/MATLAB/R2025a/bin/matlab.exe:*)"
     ],
     "deny": [],
     "ask": []
