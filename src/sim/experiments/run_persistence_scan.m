@@ -32,7 +32,6 @@ fprintf('=================================================\n\n');
 % 实验配置参数结构体
 config = struct();
 config.num_runs_per_setting = 50;          % 每组参数的重复次数，增加可提高统计可靠性
-config.enable_parallel = true;             % 默认开启并行计算 (主循环使用 parfor)，大幅提升计算效率
 config.desired_workers = 200;               % 并行工作进程数量，为空则沿用现有并行池设置
 config.burn_in_ratio = 0.5;                % 拟合扩散系数时丢弃的前期比例，避免初始瞬态影响
 config.min_diffusion = 1e-3;               % 扩散系数的下限，防止数值异常
@@ -97,65 +96,35 @@ raw_P_linear = cell(total_tasks, 1);        % 原始持久性指标数据元胞�
 
 % 并行计算池配置
 pool = [];                                  % 初始化并行池句柄
-if config.enable_parallel
-    % 配置并行计算池，根据系统资源和用户需求设置工作进程数
-    pool = configure_parallel_pool(config.desired_workers);
-    fprintf('并行模式启用: %d workers\n\n', pool.NumWorkers);
-else
-    fprintf('串行模式执行。\n\n');
-end
+% 配置并行计算池，根据系统资源和用户需求设置工作进程数
+pool = configure_parallel_pool(config.desired_workers);
+fprintf('并行模式启用: %d workers\n\n', pool.NumWorkers);
 
 %% 4. 主循环: 遍历阈值与噪声 ------------------------------------------------
 loop_timer = tic;                          % 启动计时器，记录总执行时间
 
-% 根据配置选择并行或串行执行参数扫描
-if config.enable_parallel
-    progress_queue = parallel.pool.DataQueue;
-    afterEach(progress_queue, @(~) progress_update());
-    
-    % 并行执行模式：使用parfor并行处理所有参数组合
-    parfor task_idx = 1:total_tasks
-        % 将线性任务索引转换为二维参数索引
-        [noise_idx, cj_idx] = ind2sub([num_noise, num_cj], task_idx);
-        cj_value = cj_thresholds(cj_idx);      % 当前运动显著性阈值
-        noise_value = noise_levels(noise_idx); % 当前噪声水平
-        
-        % 对当前参数组合执行多次仿真并计算统计量
-        [D_runs, P_runs] = evaluate_single_setting( ...
-            base_params, cj_value, noise_value, config, base_seed);
-        
-        % 存储原始数据和统计结果
-        raw_D_linear{task_idx} = D_runs;       % 原始扩散系数数据
-        raw_P_linear{task_idx} = P_runs;       % 原始持久性指标数据
-        D_mean_linear(task_idx) = mean(D_runs, 'omitnan');   % 扩散系数均值
-        D_std_linear(task_idx) = std(D_runs, 0, 'omitnan');  % 扩散系数标准差
-        P_std_linear(task_idx) = std(P_runs, 0, 'omitnan');  % 持久性指标标准差
-        
-        send(progress_queue, 1);
-    end
-else
-    % 串行执行模式：嵌套循环处理参数组合，提供进度显示
-    current_task = 0;
-    for cj_idx = 1:num_cj
-        cj_value = cj_thresholds(cj_idx);
-        for noise_idx = 1:num_noise
-            noise_value = noise_levels(noise_idx);
-            current_task = current_task + 1;
-            
-            % 对当前参数组合执行多次仿真并计算统计量
-            [D_runs, P_runs] = evaluate_single_setting( ...
-                base_params, cj_value, noise_value, config, base_seed);
-            
-            % 存储原始数据和统计结果
-            raw_D_linear{current_task} = D_runs;
-            raw_P_linear{current_task} = P_runs;
-            D_mean_linear(current_task) = mean(D_runs, 'omitnan');
-            D_std_linear(current_task) = std(D_runs, 0, 'omitnan');
-            P_std_linear(current_task) = std(P_runs, 0, 'omitnan');
-            
-            progress_update();
-        end
-    end
+progress_queue = parallel.pool.DataQueue;
+afterEach(progress_queue, @(~) progress_update());
+
+% 并行执行：使用 parfor 处理所有参数组合
+parfor task_idx = 1:total_tasks
+    % 将线性任务索引转换为二维参数索引
+    [noise_idx, cj_idx] = ind2sub([num_noise, num_cj], task_idx);
+    cj_value = cj_thresholds(cj_idx);      % 当前运动显著性阈值
+    noise_value = noise_levels(noise_idx); % 当前噪声水平
+
+    % 对当前参数组合执行多次仿真并计算统计量
+    [D_runs, P_runs] = evaluate_single_setting( ...
+        base_params, cj_value, noise_value, config, base_seed);
+
+    % 存储原始数据和统计结果
+    raw_D_linear{task_idx} = D_runs;       % 原始扩散系数数据
+    raw_P_linear{task_idx} = P_runs;       % 原始持久性指标数据
+    D_mean_linear(task_idx) = mean(D_runs, 'omitnan');   % 扩散系数均值
+    D_std_linear(task_idx) = std(D_runs, 0, 'omitnan');  % 扩散系数标准差
+    P_std_linear(task_idx) = std(P_runs, 0, 'omitnan');  % 持久性指标标准差
+
+    send(progress_queue, 1);
 end
 
 % 计算并显示总执行时间
@@ -164,7 +133,7 @@ fprintf('全部扫描完成，总耗时约 %.2f 分钟\n', elapsed_minutes);
 
 % 并行池管理：保留并行池以便后续任务继续复用
 % 如需释放可在脚本外手动执行 delete(gcp('nocreate'))
-if config.enable_parallel && ~isempty(pool)
+if ~isempty(pool)
     % 保留并行池，不在此处释放
 end
 
