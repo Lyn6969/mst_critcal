@@ -56,12 +56,20 @@ fprintf('配置扫描范围...\n');
 cj_thresholds = 0.0:0.1:5.0;
 noise_levels = 0.0:0.01:0.5;
 eta_levels = sqrt(2 * noise_levels);  % 根据论文定义 \eta = sqrt(2 D_\theta)
-num_runs = 40;
+num_runs = 50;
 base_seed = 20251104;
 
 num_cj = numel(cj_thresholds);
 num_noise = numel(noise_levels);
 total_tasks = num_cj * num_noise;
+
+% 预生成参数组合（向量形式，便于线性索引并行）
+[cj_mesh, noise_mesh] = meshgrid(cj_thresholds, noise_levels);
+cj_vector = cj_mesh(:);
+noise_vector = noise_mesh(:);
+cj_idx_vector = repmat(1:num_cj, num_noise, 1);
+cj_idx_vector = cj_idx_vector(:);
+noise_idx_vector = repelem((1:num_noise)', num_cj);
 
 % === 调试信息：扫描参数显示 ===
 fprintf('扫描参数配置:\n');
@@ -77,12 +85,13 @@ disp(' ');
 
 %% 3. 结果容器
 fprintf('初始化结果存储容器...\n');
-R_mean = NaN(num_noise, num_cj);
-R_std = NaN(num_noise, num_cj);
-R_sem = NaN(num_noise, num_cj);
+R_mean_lin = NaN(total_tasks, 1);
+R_std_lin = NaN(total_tasks, 1);
+R_sem_lin = NaN(total_tasks, 1);
 
 % === 调试信息：结果容器初始化 ===
 fprintf('结果矩阵大小: %d × %d (噪声×阈值)\n', num_noise, num_cj);
+fprintf('线性任务总数: %d\n', total_tasks);
 disp(' ');
 
 %% 4. 并行配置
@@ -91,13 +100,14 @@ pool = configure_parallel_pool();
 fprintf('使用并行池: %d workers\n\n', pool.NumWorkers);
 
 progress_queue = parallel.pool.DataQueue;
-progress = struct('total', total_tasks, 'completed', 0, ...
-    'start', tic, 'last', tic);
-afterEach(progress_queue, @(info) report_progress(info, progress));
+progress_key = 'run_resp_noise_cj_progress';
+start_token = tic;
+progress_state = struct('total', total_tasks, 'completed', 0, ...
+    'start', start_token, 'last', start_token);
+setappdata(0, progress_key, progress_state);
+afterEach(progress_queue, @(info) report_progress(info, progress_key, false));
 
 shared_params = parallel.pool.Constant(resp_params);
-shared_cj = parallel.pool.Constant(cj_thresholds);
-shared_noise = parallel.pool.Constant(noise_levels);
 
 % === 调试信息：开始并行扫描 ===
 fprintf('开始参数扫描...\n');
@@ -105,42 +115,40 @@ fprintf('开始时间: %s\n', char(datetime('now')));
 disp(' ');
 
 %% 5. 并行扫描
-parfor cj_idx = 1:num_cj
-    local_R_mean = NaN(num_noise, 1);
-    local_R_std = NaN(num_noise, 1);
-    local_R_sem = NaN(num_noise, 1);
+scan_clock = start_token;
 
-    params_const = shared_params.Value;
-    cj_value = shared_cj.Value(cj_idx);
-    noise_array = shared_noise.Value;
+parfor task_idx = 1:total_tasks
+    params_curr = shared_params.Value;
+    params_curr.cj_threshold = cj_vector(task_idx);
+    params_curr.angleNoiseIntensity = noise_vector(task_idx);
 
-    for noise_idx = 1:num_noise
-        params_curr = params_const;
-        params_curr.cj_threshold = cj_value;
-        params_curr.angleNoiseIntensity = noise_array(noise_idx);
+    R_runs = NaN(num_runs, 1);
+    cj_idx = cj_idx_vector(task_idx);
+    noise_idx = noise_idx_vector(task_idx);
 
-        R_runs = NaN(num_runs, 1);
-
-        for run_idx = 1:num_runs
-            seed_val = base_seed + cj_idx * 1e6 + noise_idx * 1e4 + run_idx * 97;
-            [R_val, ~] = run_single_responsiveness_trial(params_curr, num_angles, time_vec, seed_val);
-            R_runs(run_idx) = R_val;
-        end
-
-        local_R_mean(noise_idx) = mean(R_runs, 'omitnan');
-        local_R_std(noise_idx) = std(R_runs, 0, 'omitnan');
-        local_R_sem(noise_idx) = local_R_std(noise_idx) ./ sqrt(num_runs);
-
-        send(progress_queue, struct('cj_idx', cj_idx, 'noise_idx', noise_idx));
+    for run_idx = 1:num_runs
+        seed_val = base_seed + task_idx * 1e6 + run_idx * 97;
+        [R_val, ~] = run_single_responsiveness_trial(params_curr, num_angles, time_vec, seed_val);
+        R_runs(run_idx) = R_val;
     end
 
-    R_mean(:, cj_idx) = local_R_mean;
-    R_std(:, cj_idx) = local_R_std;
-    R_sem(:, cj_idx) = local_R_sem;
+    R_mean_lin(task_idx) = mean(R_runs, 'omitnan');
+    R_std_lin(task_idx) = std(R_runs, 0, 'omitnan');
+    R_sem_lin(task_idx) = R_std_lin(task_idx) ./ sqrt(num_runs);
+
+    send(progress_queue, struct('cj_idx', cj_idx, 'noise_idx', noise_idx));
 end
 
 fprintf('参数扫描完成，开始处理结果...\n');
 disp(' ');
+
+R_mean = reshape(R_mean_lin, num_noise, num_cj);
+R_std = reshape(R_std_lin, num_noise, num_cj);
+R_sem = reshape(R_sem_lin, num_noise, num_cj);
+
+if isappdata(0, progress_key)
+    report_progress(struct('cj_idx', cj_idx_vector(end), 'noise_idx', noise_idx_vector(end)), progress_key, true);
+end
 
 %% 6. 可视化
 fprintf('生成可视化图表...\n');
@@ -187,8 +195,12 @@ fprintf('实验完成。\n');
 
 % === 调试信息：脚本执行完成 ===
 fprintf('脚本执行完成 - %s\n', char(datetime('now')));
-fprintf('总耗时: %.2f 分钟\n', toc(progress.start)/60);
+fprintf('总耗时: %.2f 分钟\n', toc(scan_clock)/60);
 disp(' ');
+
+if isappdata(0, progress_key)
+    rmappdata(0, progress_key);
+end
 
 %% ========================================================================
 % 辅助函数：运行单次响应性实验（复用 tradeoff 脚本逻辑）
@@ -253,18 +265,42 @@ function V = compute_average_velocity(theta, v0)
     V = [mean(v0 * cos(theta)), mean(v0 * sin(theta))];
 end
 
-function report_progress(info, progress)
-    progress.completed = progress.completed + 1;
-    if toc(progress.last) < 2 && progress.completed < progress.total
+function report_progress(info, progress_key, force_output)
+    if ~isappdata(0, progress_key)
         return;
     end
+    progress = getappdata(0, progress_key);
+    if nargin < 3
+        force_output = false;
+    end
+
+    if force_output
+        completed_count = progress.completed;
+    else
+        progress.completed = progress.completed + 1;
+        completed_count = progress.completed;
+    end
+
+    if ~force_output && toc(progress.last) < 2 && completed_count < progress.total
+        setappdata(0, progress_key, progress);
+        return;
+    end
+
     elapsed = toc(progress.start);
-    eta = elapsed / progress.completed * (progress.total - progress.completed);
+    remaining = max(progress.total - completed_count, 0);
+    if completed_count > 0
+        eta = elapsed / completed_count * remaining;
+    else
+        eta = NaN;
+    end
+
+    pct = 100 * completed_count / progress.total;
     fprintf('  进度: %d/%d (%.1f%%) | cj #%d, noise #%d | 已用 %.1f 分 | 预计剩余 %.1f 分\n', ...
-        progress.completed, progress.total, ...
-        100 * progress.completed / progress.total, ...
+        min(completed_count, progress.total), progress.total, pct, ...
         info.cj_idx, info.noise_idx, elapsed/60, eta/60);
+
     progress.last = tic;
+    setappdata(0, progress_key, progress);
 end
 
 function pool = configure_parallel_pool()
@@ -274,7 +310,7 @@ function pool = configure_parallel_pool()
     pool = gcp('nocreate');
     if isempty(pool)
         cluster = parcluster('local');
-        max_workers = min(cluster.NumWorkers, 40);
+        max_workers = min(cluster.NumWorkers, 100);
         if max_workers < 1
             error('没有可用的并行工作线程。');
         end
