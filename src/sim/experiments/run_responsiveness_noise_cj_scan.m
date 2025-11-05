@@ -1,4 +1,3 @@
-function run_responsiveness_noise_cj_scan()
 %RUN_RESPONSIVENESS_NOISE_CJ_SCAN 扫描噪声×阈值对响应性 R 的影响
 %
 % 说明：
@@ -6,6 +5,8 @@ function run_responsiveness_noise_cj_scan()
 %   - 同时遍历运动显著性阈值 cj_threshold 与角度噪声强度 angleNoiseIntensity
 %   - 每个参数组合重复多次实验，统计响应性 R 的均值 / 标准差 / 标准误差
 %   - 输出热力图 + MAT 数据，便于进一步分析
+%
+% 脚本模式：便于调试和参数调整
 
 clc; clear; close all;
 addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
@@ -14,7 +15,13 @@ fprintf('=================================================\n');
 fprintf('   噪声 × 运动显著性阈值 扫描：响应性 R\n');
 fprintf('=================================================\n\n');
 
+% === 调试信息：脚本开始执行 ===
+fprintf('脚本开始执行 - %s\n', char(datetime('now')));
+fprintf('工作目录: %s\n', pwd);
+disp(' ');
+
 %% 1. 基础仿真参数（与 tradeoff 脚本保持一致）
+fprintf('配置基础仿真参数...\n');
 resp_params = struct();
 resp_params.N = 200;
 resp_params.rho = 1;
@@ -33,12 +40,22 @@ resp_params.stabilization_steps = 200;
 resp_params.forced_turn_duration = 200;
 resp_params.useAdaptiveThreshold = false;
 
+% === 调试信息：参数配置显示 ===
+fprintf('基础仿真参数配置完成:\n');
+fprintf('  - 粒子数量 N: %d\n', resp_params.N);
+fprintf('  - 仿真步数 T_max: %d\n', resp_params.T_max);
+fprintf('  - 时间步长 dt: %.2f\n', resp_params.dt);
+fprintf('  - 邻居半径: %.1f\n', resp_params.radius);
+disp(' ');
+
 num_angles = 1;                            % 只沿领导方向投影
 time_vec = (0:resp_params.T_max)' * resp_params.dt;
 
 %% 2. 扫描范围与试验配置
+fprintf('配置扫描范围...\n');
 cj_thresholds = 0.0:0.1:5.0;
-noise_levels = 0.0:0.01:0.;
+noise_levels = 0.0:0.01:0.5;
+eta_levels = sqrt(2 * noise_levels);  % 根据论文定义 \eta = sqrt(2 D_\theta)
 num_runs = 40;
 base_seed = 20251104;
 
@@ -46,34 +63,52 @@ num_cj = numel(cj_thresholds);
 num_noise = numel(noise_levels);
 total_tasks = num_cj * num_noise;
 
-fprintf('cj_threshold 点数: %d | 噪声点数: %d | 每组合重复: %d\n', ...
-    num_cj, num_noise, num_runs);
+% === 调试信息：扫描参数显示 ===
+fprintf('扫描参数配置:\n');
+fprintf('  - cj_threshold 范围: [%.1f, %.1f], 步长: %.1f, 点数: %d\n', ...
+    cj_thresholds(1), cj_thresholds(end), cj_thresholds(2)-cj_thresholds(1), num_cj);
+fprintf('  - noise_levels 范围: [%.2f, %.2f], 步长: %.2f, 点数: %d\n', ...
+    noise_levels(1), noise_levels(end), noise_levels(2)-noise_levels(1), num_noise);
+fprintf('  - 对应 \eta 范围: [%.3f, %.3f]\n', eta_levels(1), eta_levels(end));
+fprintf('  - 每参数组合重复次数: %d\n', num_runs);
+fprintf('  - 总实验次数: %d × %d × %d = %d\n', num_cj, num_noise, num_runs, total_tasks);
+fprintf('  - 预计总耗时(估算): %.1f 小时(假设每次实验0.1秒)\n', total_tasks * 0.1 / 3600);
+disp(' ');
 
 %% 3. 结果容器
+fprintf('初始化结果存储容器...\n');
 R_mean = NaN(num_noise, num_cj);
 R_std = NaN(num_noise, num_cj);
 R_sem = NaN(num_noise, num_cj);
-fail_rates = NaN(num_noise, num_cj);
+
+% === 调试信息：结果容器初始化 ===
+fprintf('结果矩阵大小: %d × %d (噪声×阈值)\n', num_noise, num_cj);
+disp(' ');
 
 %% 4. 并行配置
+fprintf('配置并行计算环境...\n');
 pool = configure_parallel_pool();
 fprintf('使用并行池: %d workers\n\n', pool.NumWorkers);
 
 progress_queue = parallel.pool.DataQueue;
 progress = struct('total', total_tasks, 'completed', 0, ...
     'start', tic, 'last', tic);
-afterEach(progress_queue, @(info) report_progress(info));
+afterEach(progress_queue, @(info) report_progress(info, progress));
 
 shared_params = parallel.pool.Constant(resp_params);
 shared_cj = parallel.pool.Constant(cj_thresholds);
 shared_noise = parallel.pool.Constant(noise_levels);
+
+% === 调试信息：开始并行扫描 ===
+fprintf('开始参数扫描...\n');
+fprintf('开始时间: %s\n', char(datetime('now')));
+disp(' ');
 
 %% 5. 并行扫描
 parfor cj_idx = 1:num_cj
     local_R_mean = NaN(num_noise, 1);
     local_R_std = NaN(num_noise, 1);
     local_R_sem = NaN(num_noise, 1);
-    local_fail = NaN(num_noise, 1);
 
     params_const = shared_params.Value;
     cj_value = shared_cj.Value(cj_idx);
@@ -85,21 +120,16 @@ parfor cj_idx = 1:num_cj
         params_curr.angleNoiseIntensity = noise_array(noise_idx);
 
         R_runs = NaN(num_runs, 1);
-        fail_count = 0;
 
         for run_idx = 1:num_runs
             seed_val = base_seed + cj_idx * 1e6 + noise_idx * 1e4 + run_idx * 97;
-            [R_val, triggered] = run_single_responsiveness_trial(params_curr, num_angles, time_vec, seed_val);
-            if ~triggered || isnan(R_val)
-                fail_count = fail_count + 1;
-            end
+            [R_val, ~] = run_single_responsiveness_trial(params_curr, num_angles, time_vec, seed_val);
             R_runs(run_idx) = R_val;
         end
 
         local_R_mean(noise_idx) = mean(R_runs, 'omitnan');
         local_R_std(noise_idx) = std(R_runs, 0, 'omitnan');
         local_R_sem(noise_idx) = local_R_std(noise_idx) ./ sqrt(num_runs);
-        local_fail(noise_idx) = fail_count / num_runs;
 
         send(progress_queue, struct('cj_idx', cj_idx, 'noise_idx', noise_idx));
     end
@@ -107,26 +137,28 @@ parfor cj_idx = 1:num_cj
     R_mean(:, cj_idx) = local_R_mean;
     R_std(:, cj_idx) = local_R_std;
     R_sem(:, cj_idx) = local_R_sem;
-    fail_rates(:, cj_idx) = local_fail;
 end
 
+fprintf('参数扫描完成，开始处理结果...\n');
+disp(' ');
+
 %% 6. 可视化
-figure('Color', 'white', 'Position', [160, 100, 900, 540]);
-imagesc(cj_thresholds, noise_levels, R_mean);
+fprintf('生成可视化图表...\n');
+
+% === 调试信息：结果统计 ===
+fprintf('扫描结果统计:\n');
+fprintf('  - 响应性 R 均值范围: [%.3f, %.3f]\n', min(R_mean(:), [], 'omitnan'), max(R_mean(:), [], 'omitnan'));
+fprintf('  - 有效数据点数: %d / %d\n', sum(~isnan(R_mean(:))), numel(R_mean));
+fprintf('  - 响应性标准差均值: %.3f\n', mean(R_std(:), 'omitnan'));
+disp(' ');
+
+h_mean = figure('Color', 'white', 'Position', [160, 100, 900, 540]);
+imagesc(cj_thresholds, eta_levels, R_mean);
 axis xy;
-xlabel('c_j threshold');
-ylabel('angle noise \sigma');
+xlabel('M_T');
+ylabel('\eta');
 title('响应性 R (均值)');
 cb = colorbar; cb.Label.String = 'R';
-grid on;
-
-figure('Color', 'white', 'Position', [180, 120, 900, 540]);
-imagesc(cj_thresholds, noise_levels, fail_rates);
-axis xy;
-xlabel('c_j threshold');
-ylabel('angle noise \sigma');
-title('触发失败率');
-cb = colorbar; cb.Label.String = 'failure rate';
 grid on;
 
 %% 7. 保存结果
@@ -137,38 +169,26 @@ results.generated_at = datetime('now');
 results.resp_params = resp_params;
 results.cj_thresholds = cj_thresholds;
 results.noise_levels = noise_levels;
+results.eta_levels = eta_levels;
 results.num_runs = num_runs;
 results.R_mean = R_mean;
 results.R_std = R_std;
 results.R_sem = R_sem;
-results.fail_rates = fail_rates;
 
 output_dir = fullfile('data', 'experiments', 'responsiveness_noise_cj_scan', results.timestamp);
 if ~isfolder(output_dir), mkdir(output_dir); end
 
 save(fullfile(output_dir, 'results.mat'), 'results', '-v7.3');
-savefig(gcf, fullfile(output_dir, 'failure_rate.fig'));
-print(fullfile(output_dir, 'failure_rate.png'), '-dpng', '-r300');
+savefig(h_mean, fullfile(output_dir, 'responsiveness_mean.fig'));
+print(h_mean, fullfile(output_dir, 'responsiveness_mean.png'), '-dpng', '-r300');
 
 fprintf('数据已保存至: %s\n', output_dir);
 fprintf('实验完成。\n');
 
-%% ------------------------------------------------------------------------
-    function report_progress(info)
-        progress.completed = progress.completed + 1;
-        if toc(progress.last) < 2 && progress.completed < progress.total
-            return;
-        end
-        elapsed = toc(progress.start);
-        eta = elapsed / progress.completed * (progress.total - progress.completed);
-        fprintf('  进度: %d/%d (%.1f%%) | cj #%d, noise #%d | 已用 %.1f 分 | 预计剩余 %.1f 分\n', ...
-            progress.completed, progress.total, ...
-            100 * progress.completed / progress.total, ...
-            info.cj_idx, info.noise_idx, elapsed/60, eta/60);
-        progress.last = tic;
-    end
-
-end
+% === 调试信息：脚本执行完成 ===
+fprintf('脚本执行完成 - %s\n', char(datetime('now')));
+fprintf('总耗时: %.2f 分钟\n', toc(progress.start)/60);
+disp(' ');
 
 %% ========================================================================
 % 辅助函数：运行单次响应性实验（复用 tradeoff 脚本逻辑）
@@ -231,6 +251,20 @@ end
 
 function V = compute_average_velocity(theta, v0)
     V = [mean(v0 * cos(theta)), mean(v0 * sin(theta))];
+end
+
+function report_progress(info, progress)
+    progress.completed = progress.completed + 1;
+    if toc(progress.last) < 2 && progress.completed < progress.total
+        return;
+    end
+    elapsed = toc(progress.start);
+    eta = elapsed / progress.completed * (progress.total - progress.completed);
+    fprintf('  进度: %d/%d (%.1f%%) | cj #%d, noise #%d | 已用 %.1f 分 | 预计剩余 %.1f 分\n', ...
+        progress.completed, progress.total, ...
+        100 * progress.completed / progress.total, ...
+        info.cj_idx, info.noise_idx, elapsed/60, eta/60);
+    progress.last = tic;
 end
 
 function pool = configure_parallel_pool()
