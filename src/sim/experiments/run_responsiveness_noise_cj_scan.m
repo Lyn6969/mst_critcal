@@ -54,7 +54,7 @@ time_vec = (0:resp_params.T_max)' * resp_params.dt;
 %% 2. 扫描范围与试验配置
 fprintf('配置扫描范围...\n');
 cj_thresholds = 0.0:0.1:5.0;
-noise_levels = 0.0:0.01:0.5;
+noise_levels = 0.0:0.025:0.125;
 eta_levels = sqrt(2 * noise_levels);  % 根据论文定义 \eta = sqrt(2 D_\theta)
 num_runs = 50;
 base_seed = 20251104;

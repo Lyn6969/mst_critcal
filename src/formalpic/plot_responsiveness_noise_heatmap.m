@@ -20,15 +20,22 @@ LABEL_FONT_WEIGHT = 'Bold';    % 坐标轴标签字体粗细
 TICK_FONT_SIZE = 13;           % 坐标轴刻度字体大小
 TICK_FONT_WEIGHT = 'Bold';     % 坐标轴刻度字体粗细
 COLORBAR_FONT_SIZE = 12;       % 色阶条字体大小
+COLORBAR_LINE_WIDTH = 1.5;     % 色阶条边框线宽
 
 % 坐标轴设置
 AXIS_LINE_WIDTH = 1.5;    % 坐标轴框线线宽
 TICK_DIR = 'in';          % 刻度方向 ('in' 或 'out')
 
 % 平滑与等高线配置
-SMOOTHING_FACTOR = 6;     % 网格细分倍数 (>1 时启用插值平滑)
+SMOOTHING_FACTOR = 10;     % 网格细分倍数 (>1 时启用插值平滑)
 SMOOTHING_METHOD = 'makima'; % 插值方法（'linear'、'spline'、'makima' 等）
 CONTOUR_LEVELS = 40;      % 等高线层数，数值越大视觉越平滑
+REFERENCE_LEVELS = [0.8]; % 需要强调的 R 等值线
+REFERENCE_LINE_WIDTH = 2;    % 等值线线宽
+REFERENCE_LABEL_FONT_SIZE = 12; % 等值线标签字体大小
+REFERENCE_LABEL_FONT_WEIGHT = 'Bold';
+REFERENCE_LABEL_BG = 'none';    % 等值线标签背景颜色
+REFERENCE_LABEL_SPACING = 300;  % 等值线标签间距控制
 
 %% -------------------- 数据路径配置 --------------------
 % TODO: 按实际结果路径修改以下目录与文件名
@@ -57,7 +64,7 @@ results = data.results;
 % 提取基础数据
 cj_thresholds = results.cj_thresholds;      % 运动显著性阈值 (横轴)
 noise_levels = results.noise_levels;        % 原始噪声参数 D_θ
-R_mean = results.R_mean;                    % 响应性均值矩阵 (噪声×阈值)
+R_mean = max(results.R_mean, 0);            % 响应性均值矩阵 (噪声×阈值，截断为非负)
 
 % 转换噪声参数：η = √(2 D_θ)
 eta_levels = sqrt(2 * noise_levels);        % 真实噪声参数 (纵轴)
@@ -86,6 +93,8 @@ else
     R_plot = R_mean;
 end
 
+R_plot(R_plot < 0) = 0;
+
 % 获取粒子数量（用于文件命名）
 if isfield(results, 'resp_params') && isfield(results.resp_params, 'N')
     N_particles = results.resp_params.N;
@@ -104,8 +113,6 @@ end
 % 生成输出文件名，包含粒子数量N参数
 output_name = sprintf('responsiveness_noise_heatmap_N%d.pdf', N_particles);
 output_path = fullfile(pic_dir, output_name);
-slice_name = sprintf('responsiveness_noise_slices_N%d.pdf', N_particles);
-slice_path = fullfile(pic_dir, slice_name);
 
 %% -------------------- 绘制响应性热力图 --------------------
 % 创建图形窗口，设置位置、大小和背景色
@@ -119,7 +126,7 @@ contourf(ax, cj_plot, eta_plot, R_plot, CONTOUR_LEVELS, 'LineColor', 'none');
 set(ax, 'YDir', 'normal');
 axis(ax, 'tight');
 ax.Layer = 'top';
-caxis(ax, [min(R_mean(:), [], 'omitnan'), max(R_mean(:), [], 'omitnan')]);
+clim(ax, [min(R_plot(:), [], 'omitnan'), max(R_plot(:), [], 'omitnan')]);
 
 % 设置坐标轴字体属性
 ax.FontName = FONT_NAME;
@@ -136,15 +143,32 @@ ylabel(ax, '\eta', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeig
 
 % 添加色阶条
 cb = colorbar(ax);
-cb.Label.String = 'R';
+cb.Label.String = 'Responsivity';
 cb.Label.FontName = FONT_NAME;
 cb.Label.FontSize = COLORBAR_FONT_SIZE;
 cb.Label.FontWeight = LABEL_FONT_WEIGHT;
 cb.FontName = FONT_NAME;
 cb.FontSize = TICK_FONT_SIZE;
+cb.LineWidth = COLORBAR_LINE_WIDTH;
 
 % 设置色彩映射
 colormap(ax, 'turbo');
+
+% 在热力图上叠加指定 R 水平的等值线
+
+hold(ax, 'on');
+for ref_idx = 1:numel(REFERENCE_LEVELS)
+    level = REFERENCE_LEVELS(ref_idx);
+    [C, h_ref] = contour(ax, cj_plot, eta_plot, R_plot, [level level], ...
+        'LineColor', [0 0 0], 'LineWidth', REFERENCE_LINE_WIDTH, 'LineStyle', '--');
+    if ~isempty(h_ref) && ishghandle(h_ref)
+        clabel(C, h_ref, 'LabelSpacing', REFERENCE_LABEL_SPACING, ...
+            'FontName', FONT_NAME, 'FontSize', REFERENCE_LABEL_FONT_SIZE, ...
+            'FontWeight', REFERENCE_LABEL_FONT_WEIGHT, 'Color', [0 0 0], ...
+            'BackgroundColor', REFERENCE_LABEL_BG);
+    end
+end
+hold(ax, 'off');
 
 % 导出图形为PDF矢量格式
 exportgraphics(fig, output_path, 'ContentType', 'vector');
@@ -157,44 +181,3 @@ fprintf('  运动显著性阈值范围: [%.1f, %.1f]\n', min(cj_thresholds), max
 fprintf('  真实噪声η范围: [%.3f, %.3f]\n', min(eta_levels), max(eta_levels));
 fprintf('  响应性R范围: [%.3f, %.3f]\n', min(R_mean(:), [], 'omitnan'), max(R_mean(:), [], 'omitnan'));
 
-%% -------------------- 绘制参数切片折线图 --------------------
-% 选取具有代表性的噪声水平进行折线绘制
-max_slices = 5;
-if num_noise <= max_slices
-    slice_indices = 1:num_noise;
-else
-    slice_indices = unique(round(linspace(1, num_noise, max_slices)));
-end
-
-slice_colors = turbo(numel(slice_indices));
-
-fig_slice = figure('Position', [240, 240, FIG_WIDTH, FIG_HEIGHT], 'Color', 'white');
-set(fig_slice, 'Renderer', 'painters');
-ax_slice = axes('Parent', fig_slice);
-hold(ax_slice, 'on');
-
-for k = 1:numel(slice_indices)
-    idx = slice_indices(k);
-    plot(ax_slice, cj_thresholds, R_mean(idx, :), 'LineWidth', 2.2, ...
-        'Color', slice_colors(k, :));
-end
-
-ax_slice.FontName = FONT_NAME;
-ax_slice.FontSize = TICK_FONT_SIZE;
-ax_slice.FontWeight = TICK_FONT_WEIGHT;
-ax_slice.LineWidth = AXIS_LINE_WIDTH;
-ax_slice.TickDir = TICK_DIR;
-box(ax_slice, 'on');
-
-xlabel(ax_slice, 'M_T', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
-ylabel(ax_slice, 'R', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
-
-legend_entries = arrayfun(@(idx) sprintf('\\eta = %.3f', eta_levels(idx)), ...
-    slice_indices, 'UniformOutput', false);
-legend(ax_slice, legend_entries, 'Location', 'northeast', 'Box', 'off', ...
-    'FontName', FONT_NAME, 'FontSize', COLORBAR_FONT_SIZE);
-
-hold(ax_slice, 'off');
-
-exportgraphics(fig_slice, slice_path, 'ContentType', 'vector');
-fprintf('响应性噪声切片折线图已保存至: %s\n', slice_path);
