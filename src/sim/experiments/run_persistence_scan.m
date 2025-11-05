@@ -32,7 +32,7 @@ fprintf('=================================================\n\n');
 % 实验配置参数结构体
 config = struct();
 config.num_runs_per_setting = 50;          % 每组参数的重复次数，增加可提高统计可靠性
-config.desired_workers = 200;               % 并行工作进程数量，为空则沿用现有并行池设置
+config.desired_workers = 100;               % 并行工作进程数量，为空则沿用现有并行池设置
 config.burn_in_ratio = 0.5;                % 拟合扩散系数时丢弃的前期比例，避免初始瞬态影响
 config.min_diffusion = 1e-3;               % 扩散系数的下限，防止数值异常
 config.min_fit_points = 30;                % 线性拟合所需的最少数据点数
@@ -93,9 +93,7 @@ D_std_linear = NaN(total_tasks, 1);         % 扩散系数标准差线性数组
 P_std_linear = NaN(total_tasks, 1);         % 持久性指标标准差线性数组
 raw_D_linear = cell(total_tasks, 1);        % 原始扩散系数数据元胞数组
 raw_P_linear = cell(total_tasks, 1);        % 原始持久性指标数据元胞数组
-
-% 并行计算池配置
-pool = [];                                  % 初始化并行池句柄
+                              % 初始化并行池句柄
 % 配置并行计算池，根据系统资源和用户需求设置工作进程数
 pool = configure_parallel_pool(config.desired_workers);
 fprintf('并行模式启用: %d workers\n\n', pool.NumWorkers);
@@ -287,8 +285,7 @@ function [D_value, P_value] = run_single_trial(base_params, cj_value, noise_valu
     initial_offsets = initial_positions - initial_centroid;
     msd = zeros(T + 1, 1);
     msd(1) = 0;
-    centroid = initial_centroid;
-    
+
     % 执行仿真循环，记录每一步的相对质心均方位移
     for step_idx = 1:T
         simulation.step();  % 执行一步仿真

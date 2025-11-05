@@ -56,57 +56,57 @@ pers_cfg.min_diffusion = 1e-4;
 num_angles = 1;
 time_vec = (0:params.T_max)' * params.dt;
 
-threshold_list = 0.01:0.001:0.05;
+threshold_list = 0.01:0.001:0.08;
 num_thresholds = numel(threshold_list);
 runs_per_threshold = 50;
 base_seed = 20250405;
 
+total_tasks = num_thresholds * runs_per_threshold;
+threshold_idx_vector = repelem((1:num_thresholds)', runs_per_threshold);
+run_idx_vector = repmat((1:runs_per_threshold)', num_thresholds, 1);
+
 %% 2. 预分配结果容器 ------------------------------------------------------------
-R_mean = zeros(num_thresholds, 1);
-R_std = zeros(num_thresholds, 1);
-P_mean = zeros(num_thresholds, 1);
-P_std = zeros(num_thresholds, 1);
-trigger_failures = zeros(num_thresholds, 1);
+R_runs_linear = NaN(total_tasks, 1);
+P_runs_linear = NaN(total_tasks, 1);
+trigger_flags_linear = false(total_tasks, 1);
 
 %% 3. 并行扫描 -------------------------------------------------------------------
 fprintf('开始扫描 %d 个显著性阈值，每个运行 %d 次...\n', num_thresholds, runs_per_threshold);
 dq = parallel.pool.DataQueue;
-progressPrinter(0, num_thresholds, threshold_list); % 重置进度
-afterEach(dq, @(idx) progressPrinter(idx, num_thresholds, threshold_list));
+progressPrinter([], num_thresholds, runs_per_threshold, threshold_list); % 重置进度
+afterEach(dq, @(idx) progressPrinter(idx, num_thresholds, runs_per_threshold, threshold_list));
 
-parfor t_idx = 1:num_thresholds
-    sal_thr = threshold_list(t_idx);
+parfor task_idx = 1:total_tasks
+    thr_idx = threshold_idx_vector(task_idx);
+    sal_thr = threshold_list(thr_idx);
 
     params_local = params;
     cfg_local = adaptive_cfg;
     cfg_local.saliency_threshold = sal_thr;
     params_local.adaptiveThresholdConfig = cfg_local;
 
-    R_vals = NaN(runs_per_threshold, 1);
-    P_vals = NaN(runs_per_threshold, 1);
-    fail_count = 0;
+    run_idx = run_idx_vector(task_idx);
+    seed = base_seed + thr_idx * 1e6 + run_idx * 97;
 
-    for run_idx = 1:runs_per_threshold
-        seed = base_seed + t_idx * 1e6 + run_idx * 97;
+    [R_val, triggered] = run_single_responsiveness(params_local, num_angles, time_vec, seed);
+    R_runs_linear(task_idx) = R_val;
+    trigger_flags_linear(task_idx) = (~triggered) || isnan(R_val);
 
-        [R_val, triggered] = run_single_responsiveness(params_local, num_angles, time_vec, seed);
-        if ~triggered || isnan(R_val)
-            fail_count = fail_count + 1;
-        end
-        R_vals(run_idx) = R_val;
+    [P_val, ~] = run_single_persistence(params_local, pers_cfg, seed + 17);
+    P_runs_linear(task_idx) = P_val;
 
-        [P_val, ~] = run_single_persistence(params_local, pers_cfg, seed + 17);
-        P_vals(run_idx) = P_val;
-    end
-
-    R_mean(t_idx) = mean(R_vals, 'omitnan');
-    R_std(t_idx) = std(R_vals, 'omitnan');
-    P_mean(t_idx) = mean(P_vals, 'omitnan');
-    P_std(t_idx) = std(P_vals, 'omitnan');
-    trigger_failures(t_idx) = fail_count;
-
-    send(dq, t_idx);
+    send(dq, thr_idx);
 end
+
+R_runs_matrix = reshape(R_runs_linear, runs_per_threshold, num_thresholds);
+P_runs_matrix = reshape(P_runs_linear, runs_per_threshold, num_thresholds);
+trigger_matrix = reshape(trigger_flags_linear, runs_per_threshold, num_thresholds);
+
+R_mean = mean(R_runs_matrix, 1, 'omitnan')';
+R_std = std(R_runs_matrix, 0, 1, 'omitnan')';
+P_mean = mean(P_runs_matrix, 1, 'omitnan')';
+P_std = std(P_runs_matrix, 0, 1, 'omitnan')';
+trigger_failures = sum(trigger_matrix, 1)';
 
 %% 4. P 归一化 -------------------------------------------------------------------
 max_P = max(P_mean, [], 'omitnan');
@@ -190,16 +190,22 @@ fprintf('散点图已保存: %s\n', png_file_scatter);
 %% ============================================================================
 % 辅助函数
 % ============================================================================
-function progressPrinter(idx, total, threshold_list)
-    persistent count;
-    if idx == 0
-        count = 0;
+function progressPrinter(idx, total, runs_per_thr, threshold_list)
+    persistent counts;
+    if isempty(idx)
+        counts = zeros(total, 1);
         fprintf('进度初始化完成。\n');
         return;
     end
-    count = count + 1;
-    thr_val = threshold_list(idx);
-    fprintf('  [%3d/%3d] 完成阈值 %.3f\n', count, total, thr_val);
+    if idx < 1 || idx > total
+        return;
+    end
+    counts(idx) = counts(idx) + 1;
+    if counts(idx) >= runs_per_thr
+        completed = sum(counts >= runs_per_thr);
+        thr_val = threshold_list(idx);
+        fprintf('  [%3d/%3d] 完成阈值 %.3f\n', completed, total, thr_val);
+    end
 end
 
 function [R_value, triggered] = run_single_responsiveness(params, num_angles, time_vec, seed)
