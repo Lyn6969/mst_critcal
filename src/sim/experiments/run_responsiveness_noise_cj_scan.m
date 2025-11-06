@@ -183,7 +183,11 @@ results.R_mean = R_mean;
 results.R_std = R_std;
 results.R_sem = R_sem;
 
-output_dir = fullfile('data', 'experiments', 'responsiveness_noise_cj_scan', results.timestamp);
+eta_tag = sprintf('eta%.3f-%.3f', eta_levels(1), eta_levels(end));
+eta_tag = strrep(eta_tag, '.', 'p'); % 文件夹命名中避免小数点
+
+output_dir = fullfile('data', 'experiments', 'responsiveness_noise_cj_scan', ...
+    sprintf('%s_%s', eta_tag, results.timestamp));
 if ~isfolder(output_dir), mkdir(output_dir); end
 
 save(fullfile(output_dir, 'results.mat'), 'results', '-v7.3');

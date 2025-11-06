@@ -42,7 +42,7 @@ GAUSSIAN_SIGMA = 1.2;          % 追加高斯平滑标准差 (<=0 表示禁用)
 % TODO: 按实际结果路径修改以下目录与文件名
 mat_file = 'results.mat';  % 数据文件名
 mat_dir = fullfile('data', 'experiments', 'responsiveness_noise_cj_scan', ...
-    '20251105_214434');  % 示例目录，请根据实际时间戳修改
+    '20251106_005006');  % 示例目录，请根据实际时间戳修改
 
 % 获取脚本所在目录的绝对路径
 script_dir = fileparts(mfilename('fullpath'));
