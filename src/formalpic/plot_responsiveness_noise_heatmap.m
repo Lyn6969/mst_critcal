@@ -30,12 +30,13 @@ TICK_DIR = 'in';          % 刻度方向 ('in' 或 'out')
 SMOOTHING_FACTOR = 10;     % 网格细分倍数 (>1 时启用插值平滑)
 SMOOTHING_METHOD = 'makima'; % 插值方法（'linear'、'spline'、'makima' 等）
 CONTOUR_LEVELS = 40;      % 等高线层数，数值越大视觉越平滑
-REFERENCE_LEVELS = [ 0.8]; % 需要强调的 R 等值线
+REFERENCE_LEVELS = [0.6]; % 需要强调的 R 等值线
 REFERENCE_LINE_WIDTH = 2;    % 等值线线宽
 REFERENCE_LABEL_FONT_SIZE = 12; % 等值线标签字体大小
 REFERENCE_LABEL_FONT_WEIGHT = 'Bold';
 REFERENCE_LABEL_BG = 'none';    % 等值线标签背景颜色
 REFERENCE_LABEL_SPACING = 300;  % 等值线标签间距控制
+GAUSSIAN_SIGMA = 1.2;          % 追加高斯平滑标准差 (<=0 表示禁用)
 
 %% -------------------- 数据路径配置 --------------------
 % TODO: 按实际结果路径修改以下目录与文件名
@@ -94,6 +95,13 @@ else
 end
 
 R_plot(R_plot < 0) = 0;
+
+if GAUSSIAN_SIGMA > 0
+    kernel_radius = max(1, ceil(3 * GAUSSIAN_SIGMA));
+    g_vec = exp(-((-kernel_radius:kernel_radius).^2) / (2 * GAUSSIAN_SIGMA^2));
+    g_vec = g_vec / sum(g_vec);
+    R_plot = conv2(g_vec, g_vec', R_plot, 'same');
+end
 
 % 获取粒子数量（用于文件命名）
 if isfield(results, 'resp_params') && isfield(results.resp_params, 'N')
