@@ -73,6 +73,7 @@ simulation_data/
 results/
 output/
 plots/
+data/
 
 # 视频和图像输出
 *.avi
