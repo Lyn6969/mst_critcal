@@ -85,7 +85,24 @@ end
 %% -------------------- 输出目录 --------------------
 pic_dir = fullfile(project_root, 'pic');
 if ~exist(pic_dir, 'dir'); mkdir(pic_dir); end
-output_path = fullfile(pic_dir, 'responsiveness_persistence_dual_axis.pdf');
+
+% 生成带噪声标签的文件名
+eta_value = NaN;
+if ~isnan(eta_resp)
+    eta_value = eta_resp;
+elseif ~isnan(eta_pers)
+    eta_value = eta_pers;
+end
+
+if ~isnan(eta_value)
+    eta_tag = sprintf('eta_%0.3f', eta_value);
+    eta_tag = regexprep(eta_tag, '\.', 'p');  % 文件名中用 p 代替小数点
+    filename = sprintf('responsiveness_persistence_dual_axis_%s.pdf', eta_tag);
+else
+    filename = 'responsiveness_persistence_dual_axis.pdf';  % 噪声参数缺失时使用默认文件名
+end
+
+output_path = fullfile(pic_dir, filename);
 
 %% -------------------- 绘图 --------------------
 fig = figure('Position', [180, 160, FIG_WIDTH, FIG_HEIGHT], 'Color', 'white');
