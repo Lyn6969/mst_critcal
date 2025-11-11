@@ -59,13 +59,17 @@ cfg.min_fit_points = 40;                 % 最小拟合点数：确保拟合过�
 cfg.min_diffusion = 1e-4;                % 最小扩散系数阈值：防止数值计算中的除零问题
 
 % 输出目录设置
-results_dir = fullfile('results', 'persistence');  % 结果保存路径：创建persistence子目录存储持久性分析结果
-if ~exist(results_dir, 'dir')            % 检查目录是否存在，不存在则创建
+eta_value = sqrt(2 * base_params.angleNoiseIntensity);           % 真实噪声幅度 η = √(2 D_θ)
+eta_tag = sprintf('eta_%0.3f', eta_value);
+eta_tag = regexprep(eta_tag, '\.', 'p');                         % 文件名中用 p 代替小数点
+results_dir = fullfile('results', 'persistence');                 % 结果保存路径
+if ~exist(results_dir, 'dir')                                    % 检查目录是否存在，不存在则创建
     mkdir(results_dir);
 end
+fprintf('结果目录: %s (η = %.3f)\n', results_dir, eta_value);
 timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));  % 生成时间戳：确保文件名唯一性
-output_mat = fullfile(results_dir, sprintf('persistence_cj_scan_%s.mat', timestamp));  % 数据文件路径：保存实验数据
-output_fig = fullfile(results_dir, sprintf('persistence_cj_scan_%s.png', timestamp));  % 图像文件路径：保存持久性曲线图
+output_mat = fullfile(results_dir, sprintf('persistence_cj_scan_%s_%s.mat', timestamp, eta_tag));  % 数据文件路径：时间戳后接噪声标签
+output_fig = fullfile(results_dir, sprintf('persistence_cj_scan_%s_%s.png', timestamp, eta_tag));  % 图像文件路径：时间戳后接噪声标签
 
 base_seed = 20250320;                   % 基础随机种子：确保实验可重复性
 total_timer = tic;                       % 开始计时整个实验过程：用于统计总实验时间
