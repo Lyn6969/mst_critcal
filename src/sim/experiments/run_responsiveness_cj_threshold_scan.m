@@ -188,14 +188,18 @@ legend('show', 'Location', 'best'); % 显示图例
 % 将实验配置和所有结果保存到 MAT 文件中，以便后续分析。
 
 % 创建保存结果的目录
-results_dir = fullfile('results', 'responsiveness');
+eta_value = sqrt(2 * base_params.angleNoiseIntensity);
+eta_tag = sprintf('eta_%0.3f', eta_value);
+eta_tag = regexprep(eta_tag, '\.', 'p');                         % 文件名中用 p 代替小数点
+results_dir = fullfile('results', 'responsiveness');              % 结果保存路径
 if ~exist(results_dir, 'dir')
     mkdir(results_dir);
 end
+fprintf('结果目录: %s (η = %.3f)\n', results_dir, eta_value);
 
 % 生成带时间戳的文件名
 timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
-output_path = fullfile(results_dir, sprintf('responsiveness_cj_scan_%s.mat', timestamp));
+output_path = fullfile(results_dir, sprintf('responsiveness_cj_scan_%s_%s.mat', timestamp, eta_tag));  % 时间戳后接噪声标签
 
 % --- 将所有相关数据存入一个结构体 ---
 results = struct();
