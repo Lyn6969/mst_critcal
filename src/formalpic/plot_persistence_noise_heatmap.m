@@ -22,6 +22,7 @@ COLORBAR_LINE_WIDTH = 1.5;
 TICK_DIR = 'in';          % 刻度方向
 
 CONTOUR_LEVELS = 40;      % 等高线层数，保证热力图平滑
+REMOVE_ZERO_NOISE = true; % 是否在可视化前移除 \eta = 0 的数据行
 
 %% -------------------- 数据路径配置 --------------------
 mat_file = 'persistence_results.mat';
@@ -65,6 +66,20 @@ if num_eta ~= numel(eta_levels) || num_cj ~= numel(cj_thresholds)
     error('数据维度不匹配，请核实结果文件。');
 end
 
+if REMOVE_ZERO_NOISE
+    zero_mask = abs(eta_levels) < eps;
+    if any(zero_mask)
+        eta_levels(zero_mask) = [];
+        noise_levels(zero_mask) = [];
+        P_matrix(zero_mask, :) = [];
+        fprintf('已移除 %d 行 \\eta = 0 数据，以避免图像底部伪影。\n', sum(zero_mask));
+    end
+end
+
+y_tick_step = 0.1;
+y_tick_max = ceil(max(eta_levels) / y_tick_step) * y_tick_step;
+y_ticks = 0:y_tick_step:y_tick_max;
+
 if isfield(results, 'base_params') && isfield(results.base_params, 'N')
     N_particles = results.base_params.N;
 else
@@ -88,7 +103,7 @@ set(fig, 'Renderer', 'painters');
 ax = axes('Parent', fig);
 
 contourf(ax, cj_thresholds, eta_levels, P_matrix, CONTOUR_LEVELS, 'LineColor', 'none');
-set(ax, 'YDir', 'normal');
+set(ax, 'YDir', 'normal', 'YTick', y_ticks);
 colormap(ax, 'turbo');
 box(ax, 'on');
 axis(ax, 'tight');
@@ -114,7 +129,7 @@ cb.LineWidth = COLORBAR_LINE_WIDTH;
 exportgraphics(fig, output_path, 'ContentType', 'vector');
 
 fprintf('持久性噪声热力图已保存至: %s\n', output_path);
-fprintf('参数范围: M_T ∈ [%.1f, %.1f], \eta ∈ [%.3f, %.3f]\n', ...
+fprintf('参数范围: M_T ∈ [%.1f, %.1f], \\eta ∈ [%.3f, %.3f]\n', ...
     min(cj_thresholds), max(cj_thresholds), min(eta_levels), max(eta_levels));
 fprintf('P 范围: [%.3f, %.3f]\n', ...
     min(P_matrix(:), [], 'omitnan'), max(P_matrix(:), [], 'omitnan'));
@@ -138,7 +153,7 @@ set(fig_norm, 'Renderer', 'painters');
 ax_norm = axes('Parent', fig_norm);
 
 contourf(ax_norm, cj_thresholds, eta_levels, P_norm, CONTOUR_LEVELS, 'LineColor', 'none');
-set(ax_norm, 'YDir', 'normal');
+set(ax_norm, 'YDir', 'normal', 'YTick', y_ticks);
 colormap(ax_norm, 'turbo');
 box(ax_norm, 'on');
 axis(ax_norm, 'tight');

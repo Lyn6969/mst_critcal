@@ -34,7 +34,7 @@ config = struct();
 config.num_runs_per_setting = 50;          % 每组参数的重复次数，增加可提高统计可靠性
 config.desired_workers = 100;               % 并行工作进程数量，为空则沿用现有并行池设置
 config.burn_in_ratio = 0.5;                % 拟合扩散系数时丢弃的前期比例，避免初始瞬态影响
-config.min_diffusion = 1e-6;               % 扩散系数的下限，防止数值异常
+config.min_diffusion = 1e-3;               % 扩散系数的下限，防止数值异常
 config.min_fit_points = 30;                % 线性拟合所需的最少数据点数
 
 % 粒子仿真基础参数，可按项目需求调整

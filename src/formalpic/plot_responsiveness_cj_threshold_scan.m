@@ -25,7 +25,7 @@ SHADE_ALPHA = 0.25;        % 阴影透明度
 %% -------------------- 数据路径配置 --------------------
 % TODO: 根据实际结果文件更新时间戳
 results_dir = fullfile('results', 'responsiveness');
-mat_file = 'responsiveness_cj_scan_20251105_211706.mat';
+mat_file = 'responsiveness_cj_scan_20251111_001734.mat';
 
 % 计算项目根目录路径
 script_dir = fileparts(mfilename('fullpath'));
@@ -111,9 +111,9 @@ end
 hold(ax, 'off');
 
 %% -------------------- 导出图像 --------------------
-exportgraphics(fig, output_path, 'ContentType', 'vector');
-fprintf('Responsiveness figure saved to: %s\n', output_path);
-if ~isnan(eta_value)
-    fprintf('\n噪声强度 D_theta = %.1f, 对应 eta = %.1f\n', ...
-        results.base_parameters.angleNoiseIntensity, eta_value);
-end
+% exportgraphics(fig, output_path, 'ContentType', 'vector');
+% fprintf('Responsiveness figure saved to: %s\n', output_path);
+% if ~isnan(eta_value)
+%     fprintf('\n噪声强度 D_theta = %.1f, 对应 eta = %.1f\n', ...
+%         results.base_parameters.angleNoiseIntensity, eta_value);
+% end
