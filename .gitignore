@@ -92,3 +92,6 @@ backup/
 
 # 论文文件
 *.md
+
+# Claude 配置文件
+.claude/
