@@ -27,7 +27,7 @@
 clear; clc; close all;
 
 %% -------------------- 样式配置 --------------------
-FIG_WIDTH = 400;
+FIG_WIDTH = 420;
 FIG_HEIGHT = 200;
 R_COLOR = [0.85 0.1 0.1];      % 响应性颜色
 P_COLOR = [38, 94, 180] / 255;  % 持久性颜色
@@ -44,10 +44,10 @@ TICK_DIR = 'in';
 %% -------------------- 数据路径 --------------------
 % TODO: 修改为实际文件名
 resp_dir = fullfile('results', 'responsiveness');
-resp_file = 'responsiveness_cj_scan_20251111_173429_eta_0p100.mat';
+resp_file = 'responsiveness_cj_scan_20251111_173907_eta_0p300.mat';
 
 pers_dir = fullfile('results', 'persistence');
-pers_file = 'persistence_cj_scan_20251111_203019_eta_0p100.mat';
+pers_file = 'persistence_cj_scan_20251111_203538_eta_0p300.mat';
 
 script_dir = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(script_dir));
@@ -135,6 +135,7 @@ output_path = fullfile(pic_dir, filename);
 %% -------------------- 绘图 --------------------
 fig = figure('Position', [180, 160, FIG_WIDTH, FIG_HEIGHT], 'Color', 'white');
 ax = axes('Parent', fig);
+ax.Position = [0.15, 0.20, 0.70, 0.70];  % 固定坐标轴位置，确保与其他图形对齐
 hold(ax, 'on');
 
 % 左轴：绘制响应性曲线和误差填充

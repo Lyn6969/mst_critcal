@@ -51,7 +51,7 @@ adaptive_cfg.include_self = false;
 pers_cfg = struct();
 pers_cfg.burn_in_ratio = 0.5;
 pers_cfg.min_fit_points = 40;
-pers_cfg.min_diffusion = 1e-4;
+pers_cfg.min_diffusion = 1e-3;
 
 num_angles = 1;
 time_vec = (0:params.T_max)' * params.dt;

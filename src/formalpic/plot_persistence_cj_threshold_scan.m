@@ -80,6 +80,7 @@ output_path = fullfile(pic_dir, output_name);
 %% -------------------- 绘制折线图 --------------------
 fig = figure('Position', [140, 140, FIG_WIDTH, FIG_HEIGHT], 'Color', 'white');
 ax = axes('Parent', fig);
+ax.Position = [0.15, 0.20, 0.70, 0.70];  % 固定坐标轴位置，确保与其他图形对齐
 hold(ax, 'on');
 
 fill(ax, [cj_thresholds; flip(cj_thresholds)], ...
