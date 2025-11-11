@@ -16,9 +16,14 @@
 %   - 结果数据保存至 results/persistence/
 % =========================================================================
 
-clc;            % 清空命令行窗口，确保输出信息清晰
-clear;          % 清空工作空间变量，避免变量冲突
-close all;      % 关闭所有图形窗口，释放图形资源
+if exist('persistence_scan_preserve_workspace', 'var') && persistence_scan_preserve_workspace
+    clc;        % 仅清空命令行，保留批量脚本注入的变量
+    close all;  % 收起旧图，避免干扰
+else
+    clc;        % 常规模式：清空命令行
+    clear;      % 清空变量，确保环境干净
+    close all;  % 关闭所有图形窗口
+end
 addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 %% 1. 参数设定 ------------------------------------------------------------------
 fprintf('=================================================\n');
@@ -34,7 +39,7 @@ base_params.rho = 1;                      % 密度参数：影响粒子间的相
 base_params.v0 = 1;                       % 粒子基础速度：每个粒子的标准运动速度
 base_params.angleUpdateParameter = 10;   % 角度更新参数：控制粒子方向变化的响应速度
 base_params.angleNoiseIntensity = 0.05;   % 固定噪声：角度噪声强度，保持恒定以观察阈值影响
-base_params.T_max = 800;                  % 最大仿真时间步数：总仿真时长
+base_params.T_max = 400;                  % 最大仿真时间步数：总仿真时长
 base_params.dt = 0.1;                    % 时间步长：每步仿真的时间间隔
 base_params.radius = 5;                  % 交互半径：粒子间相互影响的最大距离
 base_params.deac_threshold = 0.1745;     % 失活阈值：粒子失活的临界角度（弧度）
@@ -42,6 +47,11 @@ base_params.cj_threshold = 1.0;           % 运动显著性阈值：将在循环
 base_params.fieldSize = 50;               % 场地大小：仿真空间的边长
 base_params.initDirection = pi/4;         % 初始方向：粒子的初始运动方向（45度）
 base_params.useFixedField = true;         % 是否使用固定边界：true表示使用固定边界条件
+% 支持批量脚本覆盖噪声强度
+if exist('angle_noise_override', 'var') && ~isempty(angle_noise_override)
+    fprintf('检测到 angle_noise_override = %.5f，覆盖默认 angleNoiseIntensity。\n', angle_noise_override);
+    base_params.angleNoiseIntensity = angle_noise_override;
+end
 
 cj_thresholds = 0.0:0.1:5.0;             % cj_threshold扫描范围：从0到5，步长0.1
 num_params = numel(cj_thresholds);       % 参数点总数：扫描范围内的参数点数量
@@ -54,9 +64,9 @@ fprintf('每个参数重复次数: %d\n\n', num_runs);
 
 % 持久性估计配置
 cfg = struct();
-cfg.burn_in_ratio = 0.25;               % 预热期比例：前25%的数据不用于拟合，避免初始瞬态影响
+cfg.burn_in_ratio = 0.5;               % 预热期比例：前25%的数据不用于拟合，避免初始瞬态影响
 cfg.min_fit_points = 40;                 % 最小拟合点数：确保拟合过程有足够的数据点支持
-cfg.min_diffusion = 1e-4;                % 最小扩散系数阈值：防止数值计算中的除零问题
+cfg.min_diffusion = 1e-3;                % 最小扩散系数阈值：防止数值计算中的除零问题
 
 % 输出目录设置
 eta_value = sqrt(2 * base_params.angleNoiseIntensity);           % 真实噪声幅度 η = √(2 D_θ)

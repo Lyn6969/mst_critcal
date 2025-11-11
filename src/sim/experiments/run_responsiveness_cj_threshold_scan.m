@@ -24,9 +24,14 @@
 % =========================================================================
 
 % --- 环境初始化 ---
-clc;            % 清空命令行窗口
-clear;          % 清除工作区所有变量
-close all;      % 关闭所有图形窗口
+if exist('resp_scan_preserve_workspace', 'var') && resp_scan_preserve_workspace
+    clc;        % 仅清空命令行，保留外部脚本设置的变量
+    close all;  % 关闭图窗，避免残留
+else
+    clc;        % 常规模式：清空命令行
+    clear;      % 清除变量，保证干净环境
+    close all;  % 关闭图窗
+end
 addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 
 
@@ -60,6 +65,12 @@ base_params.initDirection = pi/4;           % 粒子初始运动方向
 base_params.useFixedField = true;           % 是否使用固定的、周期性边界的仿真区域
 base_params.stabilization_steps = 200;      % 外源脉冲施加前的系统稳定化步数
 base_params.forced_turn_duration = 200;     % 外源脉冲强制转向的持续时间
+
+% 如果存在 angle_noise_override，则覆盖默认角度噪声强度（便于批量脚本复用）
+if exist('angle_noise_override', 'var') && ~isempty(angle_noise_override)
+    fprintf('检测到 angle_noise_override = %.5f，覆盖默认 angleNoiseIntensity。\n', angle_noise_override);
+    base_params.angleNoiseIntensity = angle_noise_override;
+end
 
 % --- 参数扫描设置 ---
 cj_thresholds = 0.0:0.1:5.0;                % 定义要扫描的 cj_threshold 参数范围
@@ -372,7 +383,7 @@ function pool = configure_parallel_pool(desired_workers)
 
     % 获取本地集群信息和最大可用工作进程数
     cluster = parcluster('local');
-    max_workers = min(cluster.NumWorkers, 180);  % 限制最大工作进程数，防止资源过载
+    max_workers = min(cluster.NumWorkers, 200);  % 限制最大工作进程数，防止资源过载
     if max_workers < 1
         error('当前环境未检测到可用的并行 worker。');
     end
