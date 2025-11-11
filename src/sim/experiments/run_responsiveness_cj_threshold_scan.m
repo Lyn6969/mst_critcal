@@ -184,22 +184,28 @@ ylabel('响应性指标 R'); % Y轴标签
 title(sprintf('R 随 c_j 变化 (每点重复 %d 次)', num_runs)); % 图形标题
 legend('show', 'Location', 'best'); % 显示图例
 
-%% 6. 保存数据 --------------------------------------------------------------------
-% 将实验配置和所有结果保存到 MAT 文件中，以便后续分析。
-
-% 创建保存结果的目录
-eta_value = sqrt(2 * base_params.angleNoiseIntensity);
+% --- 输出目录与图像保存 ----------------------------------------------------
+eta_value = sqrt(2 * base_params.angleNoiseIntensity);  % 真实噪声幅度用于归档
 eta_tag = sprintf('eta_%0.3f', eta_value);
-eta_tag = regexprep(eta_tag, '\.', 'p');                         % 文件名中用 p 代替小数点
-results_dir = fullfile('results', 'responsiveness');              % 结果保存路径
+eta_tag = regexprep(eta_tag, '\.', 'p');              % 目录/文件命名中将小数点替换为 p
+results_dir = fullfile('results', 'responsiveness');      % 统一的响应性输出目录
 if ~exist(results_dir, 'dir')
     mkdir(results_dir);
 end
 fprintf('结果目录: %s (η = %.3f)\n', results_dir, eta_value);
 
-% 生成带时间戳的文件名
-timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
-output_path = fullfile(results_dir, sprintf('responsiveness_cj_scan_%s_%s.mat', timestamp, eta_tag));  % 时间戳后接噪声标签
+timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));   % 时间戳确保单次扫描唯一
+output_path = fullfile(results_dir, sprintf('responsiveness_cj_scan_%s_%s.mat', ...
+    timestamp, eta_tag));
+output_fig = fullfile(results_dir, sprintf('responsiveness_cj_scan_%s_%s.png', ...
+    timestamp, eta_tag));
+
+saveas(gcf, output_fig);  % 保存响应性曲线图，便于与持久性结果对照
+fprintf('响应性图像已保存至: %s\n', output_fig);
+
+
+%% 6. 保存数据 --------------------------------------------------------------------
+% 将实验配置和所有结果保存到 MAT 文件中，以便后续分析。
 
 % --- 将所有相关数据存入一个结构体 ---
 results = struct();

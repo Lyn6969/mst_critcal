@@ -1,4 +1,28 @@
 % plot_responsiveness_persistence_compare - 响应性/持久性双轴对比图
+%
+% 功能概述：
+%   专业的MATLAB可视化工具，用于绘制响应性（Responsivity）和持久性（Persistence）的
+%   双轴对比图，验证群集运动模型中的持久性-响应性权衡关系。
+%
+% 输入数据：
+%   - 响应性数据：results/responsiveness/ 目录下的 .mat 文件
+%     * 包含：cj_thresholds, R_mean, R_sem, base_parameters.angleNoiseIntensity
+%   - 持久性数据：results/persistence/ 目录下的 .mat 文件
+%     * 包含：cj_thresholds, P_mean, P_sem, parameters.angleNoiseIntensity
+%
+% 输出结果：
+%   - 高质量PDF双轴对比图：pic/responsiveness_persistence_dual_axis_eta_xxx.pdf
+%   - 左轴：响应性曲线（红色）+ 误差填充
+%   - 右轴：归一化持久性曲线（蓝色）+ 误差填充
+%   - 图上显示噪声参数标签：η = √(2D_θ)
+
+% 注意事项：
+%   - 确保两个数据文件的阈值采样完全一致
+%   - 文件名中的时间戳需要根据实际实验结果调整
+%   - 需要MATLAB R2020a+版本支持exportgraphics函数
+%
+% 作者：Lyn6969
+% 日期：2025年
 
 clear; clc; close all;
 
@@ -44,6 +68,7 @@ resp_results = resp_data.results;
 pers_results = pers_data.results;
 
 %% -------------------- 数据整理 --------------------
+% 提取响应性数据：阈值、均值和标准误
 cj_resp = resp_results.cj_thresholds(:);
 R_mean = resp_results.R_mean(:);
 R_sem = resp_results.R_sem(:);
@@ -52,10 +77,12 @@ cj_pers = pers_results.cj_thresholds(:);
 P_mean = pers_results.P_mean(:);
 P_sem = pers_results.P_sem(:);
 
+% 验证阈值采样一致性，确保数据可对比
 if numel(cj_resp) ~= numel(cj_pers) || any(abs(cj_resp - cj_pers) > 1e-9)
     error('响应性与持久性阈值采样不一致。');
 end
 
+% 持久性数据归一化到[0,1]范围，便于与响应性对比
 valid_idx = ~isnan(P_mean);
 if numel(unique(P_mean(valid_idx))) <= 1
     warning('持久性数据变化不足，归一化退化。');
@@ -68,11 +95,13 @@ else
     P_norm_sem = P_sem / (P_max - P_min);
 end
 
+% 计算误差范围：响应性和持久性的均值±标准误
 upper_R = R_mean + R_sem;
 lower_R = max(R_mean - R_sem, 0);
 upper_P = min(P_norm + P_norm_sem, 1);
 lower_P = max(P_norm - P_norm_sem, 0);
 
+% 提取噪声参数：计算真实噪声强度 η = √(2D_θ)
 eta_resp = NaN;
 eta_pers = NaN;
 if isfield(resp_results, 'base_parameters') && isfield(resp_results.base_parameters, 'angleNoiseIntensity')
@@ -86,7 +115,7 @@ end
 pic_dir = fullfile(project_root, 'pic');
 if ~exist(pic_dir, 'dir'); mkdir(pic_dir); end
 
-% 生成带噪声标签的文件名
+% 生成动态文件名：包含噪声标签以便区分不同参数下的结果
 eta_value = NaN;
 if ~isnan(eta_resp)
     eta_value = eta_resp;
@@ -109,6 +138,7 @@ fig = figure('Position', [180, 160, FIG_WIDTH, FIG_HEIGHT], 'Color', 'white');
 ax = axes('Parent', fig);
 hold(ax, 'on');
 
+% 左轴：绘制响应性曲线和误差填充
 yyaxis left;
 fill([cj_resp; flip(cj_resp)], [upper_R; flip(lower_R)], R_COLOR, ...
     'FaceAlpha', SHADE_ALPHA, 'EdgeColor', 'none');
@@ -116,6 +146,7 @@ plot(cj_resp, R_mean, '-', 'Color', R_COLOR, 'LineWidth', LINE_WIDTH);
 ylabel('Responsivity', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
 ax.YColor = R_COLOR;
 
+% 右轴：绘制归一化持久性曲线和误差填充
 yyaxis right;
 fill([cj_resp; flip(cj_resp)], [upper_P; flip(lower_P)], P_COLOR, ...
     'FaceAlpha', SHADE_ALPHA, 'EdgeColor', 'none');
@@ -135,6 +166,7 @@ grid(ax, 'off');
 xlabel('M_T', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
 xlim([min(cj_resp), max(cj_resp)]);
 
+% 在图上添加噪声参数标签，显示当前实验条件
 eta_label = NaN;
 if ~isnan(eta_resp)
     eta_label = eta_resp;
@@ -151,6 +183,7 @@ end
 hold(ax, 'off');
 
 %% -------------------- 导出 --------------------
+% 导出高质量PDF并显示实验参数信息
 exportgraphics(fig, output_path, 'ContentType', 'vector');
 fprintf('Dual-axis figure saved to: %s\n', output_path);
 if ~isnan(eta_resp)
