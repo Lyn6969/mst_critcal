@@ -1,4 +1,4 @@
-% run_responsiveness_cj_threshold_scan_multi_eta
+% run_responsiveness_cj_threshold_scan_multi_eta 批量运行响应性扫描，覆盖多组噪声幅度 η
 % =========================================================================
 % 功能：
 %   - 依次扫描多组噪声幅度 η，复用 run_responsiveness_cj_threshold_scan 脚本
@@ -12,7 +12,7 @@
 
 clc; clear; close all;
 
-script_dir = fileparts(mfilename('fullpath'));
+script_dir = fileparts(mfilename('fullpath')); 
 addpath(genpath(fullfile(script_dir, '..', '..', '..')));
 
 eta_values = [0 0.05 0.10, 0.15, 0.20, 0.25, 0.30];   % 指定需要批量运行的噪声幅度
