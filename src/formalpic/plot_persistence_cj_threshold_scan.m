@@ -24,7 +24,7 @@ SHADE_ALPHA = 0.25;        % 阴影透明度
 %% -------------------- 数据路径配置 --------------------
 % TODO: 将下列文件名替换为实际的时间戳文件
 results_dir = fullfile('results', 'persistence');
-mat_file = 'persistence_cj_scan_20251105_214654.mat';
+mat_file = 'persistence_cj_scan_20251111_203538_eta_0p300.mat';
 
 script_dir = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(script_dir));
@@ -62,10 +62,18 @@ agent_count = NaN;
 if isfield(results, 'parameters') && isfield(results.parameters, 'N')
     agent_count = results.parameters.N;
 end
+
 if isnan(agent_count)
-    output_name = 'persistence_vs_mt.pdf';
+    base_name = 'persistence_vs_mt';
 else
-    output_name = sprintf('persistence_vs_mt_N%d.pdf', agent_count);
+    base_name = sprintf('persistence_vs_mt_N%d', agent_count);
+end
+
+if isnan(eta_value)
+    output_name = sprintf('%s.pdf', base_name);
+else
+    eta_tag = strrep(sprintf('eta_%0.3f', eta_value), '.', 'p');
+    output_name = sprintf('%s_%s.pdf', base_name, eta_tag);
 end
 output_path = fullfile(pic_dir, output_name);
 
@@ -93,13 +101,6 @@ ylabel(ax, 'Persistence', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'F
 
 xlim(ax, [min(cj_thresholds), max(cj_thresholds)]);
 ylim(ax, [0, max(upper_bound) * 1.05]);
-
-if ~isnan(eta_value)
-    text(ax, 'Units', 'normalized', 'Position', [0.97, 0.08], ...
-        'String', sprintf('\\eta = %.1f', eta_value), ...
-        'HorizontalAlignment', 'right', 'FontName', FONT_NAME, ...
-        'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
-end
 
 hold(ax, 'off');
 

@@ -27,8 +27,8 @@
 clear; clc; close all;
 
 %% -------------------- 样式配置 --------------------
-FIG_WIDTH = 500;
-FIG_HEIGHT = 280;
+FIG_WIDTH = 400;
+FIG_HEIGHT = 200;
 R_COLOR = [0.85 0.1 0.1];      % 响应性颜色
 P_COLOR = [38, 94, 180] / 255;  % 持久性颜色
 SHADE_ALPHA = 0.25;
@@ -44,10 +44,10 @@ TICK_DIR = 'in';
 %% -------------------- 数据路径 --------------------
 % TODO: 修改为实际文件名
 resp_dir = fullfile('results', 'responsiveness');
-resp_file = 'responsiveness_cj_scan_20251105_211706.mat';
+resp_file = 'responsiveness_cj_scan_20251111_173429_eta_0p100.mat';
 
 pers_dir = fullfile('results', 'persistence');
-pers_file = 'persistence_cj_scan_20251105_214654.mat';
+pers_file = 'persistence_cj_scan_20251111_203019_eta_0p100.mat';
 
 script_dir = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(script_dir));
@@ -124,11 +124,10 @@ elseif ~isnan(eta_pers)
 end
 
 if ~isnan(eta_value)
-    eta_tag = sprintf('eta_%0.3f', eta_value);
-    eta_tag = regexprep(eta_tag, '\.', 'p');  % 文件名中用 p 代替小数点
+    eta_tag = strrep(sprintf('eta_%0.3f', eta_value), '.', 'p');
     filename = sprintf('responsiveness_persistence_dual_axis_%s.pdf', eta_tag);
 else
-    filename = 'responsiveness_persistence_dual_axis.pdf';  % 噪声参数缺失时使用默认文件名
+    filename = 'responsiveness_persistence_dual_axis.pdf';
 end
 
 output_path = fullfile(pic_dir, filename);
@@ -145,14 +144,16 @@ fill([cj_resp; flip(cj_resp)], [upper_R; flip(lower_R)], R_COLOR, ...
 plot(cj_resp, R_mean, '-', 'Color', R_COLOR, 'LineWidth', LINE_WIDTH);
 ylabel('Responsivity', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
 ax.YColor = R_COLOR;
-
+ylim([0, 1.05]);
+yticks(ax, 0:0.2:1);
 % 右轴：绘制归一化持久性曲线和误差填充
 yyaxis right;
 fill([cj_resp; flip(cj_resp)], [upper_P; flip(lower_P)], P_COLOR, ...
     'FaceAlpha', SHADE_ALPHA, 'EdgeColor', 'none');
 plot(cj_resp, P_norm, '-', 'Color', P_COLOR, 'LineWidth', LINE_WIDTH);
-ylabel('Normalized Persistence', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
+ylabel('Norm. Persistence', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
 ylim([0, 1.05]);
+yticks(ax, 0:0.2:1);
 ax.YColor = P_COLOR;
 
 yyaxis left;
@@ -166,20 +167,8 @@ grid(ax, 'off');
 xlabel('M_T', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
 xlim([min(cj_resp), max(cj_resp)]);
 
-% 在图上添加噪声参数标签，显示当前实验条件
-eta_label = NaN;
-if ~isnan(eta_resp)
-    eta_label = eta_resp;
-elseif ~isnan(eta_pers)
-    eta_label = eta_pers;
-end
-if ~isnan(eta_label)
-    text(ax, 'Units', 'normalized', 'Position', [0.97, 0.08], ...
-        'String', sprintf('\\eta = %.1f', eta_label), ...
-        'HorizontalAlignment', 'right', 'FontName', FONT_NAME, ...
-        'FontSize', LABEL_FONT_SIZE-1, 'FontWeight', LABEL_FONT_WEIGHT);
-end
 
+% 在图上添加噪声参数标签，显示当前实验条件
 hold(ax, 'off');
 
 %% -------------------- 导出 --------------------

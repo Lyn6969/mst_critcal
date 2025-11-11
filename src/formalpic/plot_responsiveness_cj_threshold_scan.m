@@ -25,7 +25,7 @@ SHADE_ALPHA = 0.25;        % 阴影透明度
 %% -------------------- 数据路径配置 --------------------
 % TODO: 根据实际结果文件更新时间戳
 results_dir = fullfile('results', 'responsiveness');
-mat_file = 'responsiveness_cj_scan_20251111_001734.mat';
+mat_file = 'responsiveness_cj_scan_20251111_173907_eta_0p300.mat';
 
 % 计算项目根目录路径
 script_dir = fileparts(mfilename('fullpath'));
@@ -67,7 +67,12 @@ if ~exist(pic_dir, 'dir')
     mkdir(pic_dir);
 end
 
-output_name = sprintf('responsiveness_vs_mt_N%d.pdf', results.base_parameters.N);
+if isnan(eta_value)
+    output_name = sprintf('responsiveness_vs_mt_N%d.pdf', results.base_parameters.N);
+else
+    eta_tag = strrep(sprintf('eta_%0.3f', eta_value), '.', 'p');
+    output_name = sprintf('responsiveness_vs_mt_N%d_%s.pdf', results.base_parameters.N, eta_tag);
+end
 output_path = fullfile(pic_dir, output_name);
 
 %% -------------------- 绘制折线图 --------------------
@@ -99,21 +104,15 @@ ylabel(ax, 'Responsivity', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, '
 
 % 适度留白
 xlim(ax, [min(cj_thresholds), max(cj_thresholds)]);
-ylim(ax, [0, max(upper_bound) * 1.05]);
-
-if ~isnan(eta_value)
-    text(ax, 'Units', 'normalized', 'Position', [0.97, 0.92], ...
-        'String', sprintf('\\eta = %.1f', eta_value), ...
-        'HorizontalAlignment', 'right', 'FontName', FONT_NAME, ...
-        'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
-end
+ylim(ax, [0, 1]);
+yticks(ax, 0:0.2:1);
 
 hold(ax, 'off');
 
-%% -------------------- 导出图像 --------------------
-% exportgraphics(fig, output_path, 'ContentType', 'vector');
-% fprintf('Responsiveness figure saved to: %s\n', output_path);
-% if ~isnan(eta_value)
-%     fprintf('\n噪声强度 D_theta = %.1f, 对应 eta = %.1f\n', ...
-%         results.base_parameters.angleNoiseIntensity, eta_value);
-% end
+% -------------------- 导出图像 --------------------
+exportgraphics(fig, output_path, 'ContentType', 'vector');
+fprintf('Responsiveness figure saved to: %s\n', output_path);
+if ~isnan(eta_value)
+    fprintf('\n噪声强度 D_theta = %.1f, 对应 eta = %.1f\n', ...
+        results.base_parameters.angleNoiseIntensity, eta_value);
+end

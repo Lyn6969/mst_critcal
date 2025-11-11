@@ -16,7 +16,7 @@ LABEL_FONT_SIZE = 12;     % 坐标轴标签字体大小
 LABEL_FONT_WEIGHT = 'Bold';
 TICK_FONT_SIZE = 13;      % 刻度字体大小
 TICK_FONT_WEIGHT = 'Bold';
-COLORBAR_FONT_SIZE = 12;  % 色阶条字体大小
+COLORBAR_FONT_SIZE = 15;  % 色阶条字体大小
 AXIS_LINE_WIDTH = 1.5;    % 坐标轴线宽
 COLORBAR_LINE_WIDTH = 1.5;
 TICK_DIR = 'in';          % 刻度方向
@@ -178,7 +178,7 @@ xlabel(ax_norm, 'M_T', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'Font
 ylabel(ax_norm, '\eta', 'FontName', FONT_NAME, 'FontSize', LABEL_FONT_SIZE, 'FontWeight', LABEL_FONT_WEIGHT);
 
 cb_norm = colorbar(ax_norm);
-cb_norm.Label.String = 'Normalized Persistence';
+cb_norm.Label.String = 'Norm. Persistence';
 cb_norm.Label.FontName = FONT_NAME;
 cb_norm.Label.FontSize = COLORBAR_FONT_SIZE;
 cb_norm.Label.FontWeight = LABEL_FONT_WEIGHT;
