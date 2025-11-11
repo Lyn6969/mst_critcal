@@ -21,14 +21,22 @@ eval_cfg.num_angles = 1;                 % 与 scan_saliency_threshold 保持一
 eval_cfg.use_parallel = true;            % 启用并行以充分利用多核资源
 
 ga_options = optimoptions('gamultiobj', ...
-    'PopulationSize', 28, ...
-    'MaxGenerations', 25, ...
+    'PopulationSize', 50, ...
+    'MaxGenerations', 50, ...
     'FunctionTolerance', 1e-3, ...
-    'UseParallel', eval_cfg.use_parallel, ...
+    'UseParallel', false, ...  % 关闭种群并行，改为在Monte Carlo层面并行以提升效率
     'Display', 'iter');
 
+% 并行池管理：复用现有池以提高效率
 if eval_cfg.use_parallel
-    eval_cfg.parallel_pool = ensure_parallel_pool(200);
+    pool = gcp('nocreate');  % 检查是否已有并行池
+    if isempty(pool)
+        pool = ensure_parallel_pool(200);
+        fprintf('创建新的并行池，worker数量: %d\n', pool.NumWorkers);
+    else
+        fprintf('复用现有并行池，worker数量: %d\n', pool.NumWorkers);
+    end
+    eval_cfg.parallel_pool = pool;
 else
     eval_cfg.parallel_pool = [];
 end
@@ -140,7 +148,7 @@ function metrics = simulate_metrics(sal_thr, params, adaptive_cfg, pers_cfg, eva
     R_runs = NaN(runs, 1);
     P_runs = NaN(runs, 1);
 
-    for idx = 1:runs
+    parfor idx = 1:runs  % 并行执行Monte Carlo重复实验，显著提升计算效率
         seed = eval_cfg.base_seed + idx * 97 + round(sal_thr * 1e6);
         [R_val, triggered] = run_single_responsiveness(params_local, ...
             eval_cfg.num_angles, eval_cfg.time_vec, seed);
