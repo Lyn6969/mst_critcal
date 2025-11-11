@@ -10,7 +10,7 @@
 clc; clear; close all;
 addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 
-eta_values = [0.10];        % 需要单独优化的噪声幅度
+eta_values =  0.30;        % 需要单独优化的噪声幅度
 threshold_bounds = [0.01, 0.08];        % 方差阈值搜索区间
 
 % Monte Carlo 与优化配置 -------------------------------------------------
@@ -18,7 +18,7 @@ eval_cfg = struct();
 eval_cfg.runs_per_threshold = 50;        % 单个候选阈值的重复次数（权衡准确度/耗时）
 eval_cfg.base_seed = 20250405;           % 基础随机种子，保证可复现
 eval_cfg.num_angles = 1;                 % 与 scan_saliency_threshold 保持一致
-eval_cfg.use_parallel = false;           % 可按需改为 true（需注意嵌套并行）
+eval_cfg.use_parallel = true;            % 启用并行以充分利用多核资源
 
 ga_options = optimoptions('gamultiobj', ...
     'PopulationSize', 28, ...
@@ -26,6 +26,12 @@ ga_options = optimoptions('gamultiobj', ...
     'FunctionTolerance', 1e-3, ...
     'UseParallel', eval_cfg.use_parallel, ...
     'Display', 'iter');
+
+if eval_cfg.use_parallel
+    eval_cfg.parallel_pool = ensure_parallel_pool(200);
+else
+    eval_cfg.parallel_pool = [];
+end
 
 % 共享基础参数（与 scan_saliency_threshold 一致） ---------------------------
 base_params = struct();
@@ -275,4 +281,18 @@ end
 
 function V = compute_average_velocity(theta, v0)
     V = [mean(v0 * cos(theta)), mean(v0 * sin(theta))];
+end
+
+function pool = ensure_parallel_pool(desired_workers)
+    pool = gcp('nocreate');
+    cluster = parcluster('local');
+    max_workers = min(cluster.NumWorkers, desired_workers);
+    if isempty(pool)
+        pool = parpool(cluster, max_workers);
+        return;
+    end
+    if pool.NumWorkers ~= max_workers
+        delete(pool);
+        pool = parpool(cluster, max_workers);
+    end
 end
