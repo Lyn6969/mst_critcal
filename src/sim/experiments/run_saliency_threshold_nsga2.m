@@ -114,9 +114,12 @@ for eta = eta_values
     base_fig_name = sprintf('nsga2_saliency_front_%s', eta_tag);
     output_pdf = fullfile(pic_dir, [base_fig_name, '.pdf']);
     output_png = fullfile(pic_dir, [base_fig_name, '.png']);
+    output_fig = fullfile(pic_dir, [base_fig_name, '.fig']);
     exportgraphics(fig, output_pdf, 'ContentType', 'vector');
     exportgraphics(fig, output_png, 'Resolution', 300);
-    fprintf('η = %.2f 图像已保存：%s (PDF) / %s (PNG)\n', eta, output_pdf, output_png);
+    savefig(fig, output_fig);
+    fprintf('η = %.2f 图像已保存：%s (PDF) / %s (PNG) / %s (FIG)\n', ...
+        eta, output_pdf, output_png, output_fig);
 end
 
 %% ========================================================================
