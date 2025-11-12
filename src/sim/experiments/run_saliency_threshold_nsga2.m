@@ -111,9 +111,12 @@ for eta = eta_values
     xlabel('响应性 R'); ylabel('持久性 P');
     title(sprintf('η = %.2f 的 Pareto 前沿 (NSGA-II)', eta));
     grid on; box on;
-    output_pic = fullfile(pic_dir, sprintf('nsga2_saliency_front_%s.pdf', eta_tag));
-    exportgraphics(fig, output_pic, 'ContentType', 'vector');
-    fprintf('η = %.2f 图像已保存：%s\n', eta, output_pic);
+    base_fig_name = sprintf('nsga2_saliency_front_%s', eta_tag);
+    output_pdf = fullfile(pic_dir, [base_fig_name, '.pdf']);
+    output_png = fullfile(pic_dir, [base_fig_name, '.png']);
+    exportgraphics(fig, output_pdf, 'ContentType', 'vector');
+    exportgraphics(fig, output_png, 'Resolution', 300);
+    fprintf('η = %.2f 图像已保存：%s (PDF) / %s (PNG)\n', eta, output_pdf, output_png);
 end
 
 %% ========================================================================
