@@ -31,7 +31,7 @@ ga_options = optimoptions('gamultiobj', ...
 if eval_cfg.use_parallel
     pool = gcp('nocreate');  % 检查是否已有并行池
     if isempty(pool)
-        pool = ensure_parallel_pool(200);
+        pool = ensure_parallel_pool(100);
         fprintf('创建新的并行池，worker数量: %d\n', pool.NumWorkers);
     else
         fprintf('复用现有并行池，worker数量: %d\n', pool.NumWorkers);
