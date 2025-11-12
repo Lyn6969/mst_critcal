@@ -10,7 +10,7 @@
 clc; clear; close all;
 addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 
-eta_values =  0.30;        % 需要单独优化的噪声幅度
+eta_values = [0.1, 0.2, 0.2];        % 需要单独优化的噪声幅度
 threshold_bounds = [0.01, 0.08];        % 方差阈值搜索区间
 
 % Monte Carlo 与优化配置 -------------------------------------------------
