@@ -1,8 +1,8 @@
-% plot_cj_tradeoff_pareto
+% plot_cj_tradeoff_scatter
 % =========================================================================
 % 功能：
 %   - 读取 run_cj_tradeoff_adaptive_scan_shared_seed 生成的 summary 数据，
-%     以论文风格绘制固定阈值的 R-P 散点分布与 Pareto 前沿，并突出自适应阈值结果。
+%     以论文风格绘制固定阈值的 R-P 散点分布与 散点对比，并突出自适应阈值结果。
 % 使用说明：
 %   - 修改 mat_file & mat_dir 以指向实际生成的 MAT 结果文件。
 % =========================================================================
@@ -21,12 +21,14 @@ TICK_DIR = 'in';
 SCATTER_SIZE = 46;
 ADAPTIVE_MARKER_SIZE = 300;
 FRONT_LINE_WIDTH = 3.0;
+CURVE_LINE_WIDTH = 4;
 FRONT_COLORMAP = turbo(256);
 GREY_COLOR = [0.7 0.7 0.7];
 COLORBAR_LINE_WIDTH = 1.5;
 GRID_LINE_STYLE = '--';
 GRID_LINE_WIDTH = 1.5;
 GRID_ALPHA = 0.1;
+ENABLE_SMOOTH_CURVE = true;   % 需要时设置为 true，可绘制渐变平滑曲线
 
 %% -------------------- 数据路径配置 --------------------
 % TODO: 根据实际输出文件更新时间戳
@@ -76,33 +78,37 @@ cj_front = cj_vals(front_mask);
 
 % 按 R 值排序并平滑插值，生成光滑前沿
 [R_sorted, order] = sort(R_front);
-P_sorted = P_front(order);
-cj_sorted = cj_front(order);
-
-if numel(R_sorted) >= 4
-    R_dense = linspace(R_sorted(1), R_sorted(end), 160);
-    P_dense = interp1(R_sorted, P_sorted, R_dense, 'pchip');
-    CJ_dense = interp1(R_sorted, cj_sorted, R_dense, 'pchip');
-else
-    R_dense = R_sorted;
-    P_dense = P_sorted;
-    CJ_dense = cj_sorted;
-end
-
-% 根据阈值大小映射颜色（最小值→蓝，最大值→黄）
+% 阈值范围（用于色彩映射）
 cj_min = min(cj_vals);
 cj_max = max(cj_vals);
-cj_norm = (CJ_dense - cj_min) ./ max(cj_max - cj_min, eps);
-color_idx = max(1, min(size(FRONT_COLORMAP, 1), round(cj_norm * (size(FRONT_COLORMAP,1)-1)) + 1));
-front_colors = FRONT_COLORMAP(color_idx, :);
 
 %% -------------------- 绘图 --------------------
 fig = figure('Color', 'white', 'Position', FIG_SIZE);
 ax = axes('Parent', fig); hold(ax, 'on');
 
-% 固定阈值散点
-scatter(ax, R_fixed, P_fixed, SCATTER_SIZE, cj_vals, 'filled', 'MarkerFaceAlpha', 0.8, ...
-    'MarkerEdgeColor', [0.4 0.4 0.4], 'DisplayName', 'Fixed thresholds');
+if ENABLE_SMOOTH_CURVE && numel(R_fixed) >= 4
+    [cj_sorted, order] = sort(cj_vals);
+    R_sorted = R_fixed(order);
+    P_sorted = P_fixed(order);
+    cj_dense = linspace(cj_sorted(1), cj_sorted(end), 400);
+
+    smooth_param = 0.97;
+    R_spline = csaps(cj_sorted, R_sorted, smooth_param);
+    P_spline = csaps(cj_sorted, P_sorted, smooth_param);
+    R_dense = fnval(R_spline, cj_dense);
+    P_dense = fnval(P_spline, cj_dense);
+
+    cj_norm = (cj_dense - cj_min) ./ max(cj_max - cj_min, eps);
+    color_idx = max(1, min(size(FRONT_COLORMAP,1), round(cj_norm * (size(FRONT_COLORMAP,1)-1)) + 1));
+    for idx = 1:numel(cj_dense)-1
+        line(ax, R_dense(idx:idx+1), P_dense(idx:idx+1), 'Color', FRONT_COLORMAP(color_idx(idx), :), ...
+            'LineWidth', CURVE_LINE_WIDTH, 'HandleVisibility', 'off', 'LineJoin', 'round');
+    end
+else
+    % 固定阈值散点
+    scatter(ax, R_fixed, P_fixed, SCATTER_SIZE, cj_vals, 'filled', 'MarkerFaceAlpha', 0.8, ...
+        'MarkerEdgeColor', [0.4 0.4 0.4], 'DisplayName', 'Fixed thresholds');
+end
 
 % 自适应阈值标记
 R_adapt = adaptive.R_mean;
@@ -112,6 +118,8 @@ end
 P_adapt = adaptive.P_mean_norm;
 scatter(ax, R_adapt, P_adapt, ADAPTIVE_MARKER_SIZE, [0.85 0.2 0.2], 'filled', ...
     'Marker', 'p', 'MarkerEdgeColor', [0.45 0 0]);
+text(ax, R_adapt + 0.05, P_adapt , 'Adaptive M_T', 'FontName', FONT_NAME, ...
+    'FontSize', LABEL_FONT_SIZE, 'FontWeight', 'Bold', 'HorizontalAlignment', 'left');
 
 % 坐标与样式
 ax.FontName = FONT_NAME;
@@ -154,7 +162,7 @@ legend(ax, 'off');
 pic_dir = fullfile(project_root, 'pic');
 if ~exist(pic_dir, 'dir'); mkdir(pic_dir); end
 
-base_name = sprintf('cj_tradeoff_pareto_%s', summary.timestamp);
+base_name = sprintf('cj_tradeoff_scatter_%s', summary.timestamp);
 pdf_path = fullfile(pic_dir, [base_name, '.pdf']);
 png_path = fullfile(pic_dir, [base_name, '.png']);
 
