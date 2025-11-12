@@ -10,7 +10,7 @@
 clear; clc; close all;
 
 %% -------------------- 图像样式配置 --------------------
-FIG_SIZE = [150, 150, 520, 520];      % 方正布局，便于排版
+FIG_SIZE = [150, 150, 500,500];      % 方正布局，便于排版
 FONT_NAME = 'Arial';
 LABEL_FONT_SIZE = 12;
 LABEL_FONT_WEIGHT = 'Bold';
@@ -19,13 +19,13 @@ TICK_FONT_WEIGHT = 'Bold';
 AXIS_LINE_WIDTH = 1.5;
 TICK_DIR = 'in';
 SCATTER_SIZE = 46;
-ADAPTIVE_MARKER_SIZE = 150;
+ADAPTIVE_MARKER_SIZE = 300;
 FRONT_LINE_WIDTH = 3.0;
 FRONT_COLORMAP = turbo(256);
 GREY_COLOR = [0.7 0.7 0.7];
 COLORBAR_LINE_WIDTH = 1.5;
 GRID_LINE_STYLE = '--';
-GRID_LINE_WIDTH = 1.0;
+GRID_LINE_WIDTH = 1.5;
 GRID_ALPHA = 0.1;
 
 %% -------------------- 数据路径配置 --------------------
