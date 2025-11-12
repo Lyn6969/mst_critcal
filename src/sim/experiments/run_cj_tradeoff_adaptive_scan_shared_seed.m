@@ -54,15 +54,15 @@ num_angles = 1;                                 % 投影角度数量
 
 % 持久性计算配置
 pers_cfg = struct();
-pers_cfg.burn_in_ratio = 0.25;                  % 去除前25%数据
-pers_cfg.min_diffusion = 1e-4;                  % 最小扩散系数下限
+pers_cfg.burn_in_ratio = 0.5;                  % 去除前25%数据
+pers_cfg.min_diffusion = 1e-3;                  % 最小扩散系数下限
 pers_cfg.min_fit_points = 40;                   % 拟合最小数据点数
 
 % 自适应阈值配置
 adaptive_cfg = struct();
 adaptive_cfg.cj_low = 0.5;                      % cj下限
 adaptive_cfg.cj_high = 5.0;                     % cj上限
-adaptive_cfg.saliency_threshold = 0.031;        % 显著性阈值
+adaptive_cfg.saliency_threshold = 0.031;        % 显著性方差阈值
 adaptive_cfg.include_self = false;              % 不包含自身
 
 % 定义两种实验模式
