@@ -33,7 +33,7 @@ ENABLE_SMOOTH_CURVE = true;   % 需要时设置为 true，可绘制渐变平滑�
 %% -------------------- 数据路径配置 --------------------
 % TODO: 根据实际输出文件更新时间戳
 mat_dir = fullfile('results', 'tradeoff');
-mat_file = 'cj_tradeoff_adaptive_shared_seed_20251112_234029.mat';
+mat_file = 'cj_tradeoff_adaptive_shared_seed_20251112_181943.mat';
 
 script_dir = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(script_dir));
@@ -92,7 +92,7 @@ if ENABLE_SMOOTH_CURVE && numel(R_fixed) >= 4
     P_sorted = P_fixed(order);
     cj_dense = linspace(cj_sorted(1), cj_sorted(end), 400);
 
-    smooth_param = 1;
+    smooth_param = 0.999;
     R_spline = csaps(cj_sorted, R_sorted, smooth_param);
     P_spline = csaps(cj_sorted, P_sorted, smooth_param);
     R_dense = fnval(R_spline, cj_dense);

@@ -1,9 +1,12 @@
-function results = run_delta_c_m_vs_1_scan_parallel_with_N(N_input)
-%RUN_DELTA_C_M_VS_1_SCAN_PARALLEL_WITH_N 支持自定义N值的并行扫描运动显著性阈值
-%   基于原 run_delta_c_m_vs_1_scan_parallel 函数，增加对集群个体数目N的自定义支持
+function results = run_delta_c_m_vs_1_scan_parallel_with_N(N_input, varargin)
+%RUN_DELTA_C_M_VS_1_SCAN_PARALLEL_WITH_N 支持自定义N值与噪声η的并行扫描
+%   在原始函数基础上，增加对集群个体数目 N 和角噪声幅度 η 的自定义支持。
 %
 %   输入参数:
-%   - N_input: 集群个体数目（如200, 400, 800等）
+%   - N_input: 集群个体数目（如 200, 400, 800 等）
+%   - varargin{1} (可选): 噪声幅度 η（如 0.2, 0.25, 0.3）。
+%       若提供，则根据 η 计算 angleNoiseIntensity = η^2 / 2，
+%       并在输出目录与文件名中写入 eta 标签。
 %
 %   输出:
 %   - results: 实验结果结构体，包含所有统计数据和元信息
@@ -15,8 +18,20 @@ fprintf('=================================================\n\n');
 addpath(genpath(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')));
 params = default_simulation_parameters();
 
-% 使用传入的N值覆盖默认值
+% 解析可选噪声参数 η，并覆盖默认 angleNoiseIntensity
+eta_value = [];
+if ~isempty(varargin)
+    eta_value = varargin{1};
+end
+
+% 使用传入的 N 值覆盖默认值
 params.N = N_input;
+if ~isempty(eta_value)
+    angle_noise_intensity = (eta_value.^2) / 2;  % η = √(2D) → D = η^2 / 2
+    fprintf('设置噪声幅度 η = %.3f (angleNoiseIntensity = %.6f)\n', ...
+        eta_value, angle_noise_intensity);
+    params.angleNoiseIntensity = angle_noise_intensity;
+end
 
 cj_threshold_min = 0;
 cj_threshold_max = 5.0;
@@ -52,9 +67,22 @@ progress_update_timer = tic;
 progress_step = max(1, floor(total_tasks / 100));
 
 timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
-output_dir = ensure_data_directory_with_N(timestamp, N_input);
-output_filename = fullfile(output_dir, 'data.mat');
-temp_filename = fullfile(output_dir, 'temp.mat');
+
+% 构造包含 η 标签的输出目录与文件名
+if isempty(eta_value)
+    eta_tag = '';
+    output_dir = ensure_data_directory_with_N(timestamp, N_input);
+    data_filename = 'data.mat';
+    temp_filename = fullfile(output_dir, 'temp.mat');
+    quicklook_prefix = 'result';
+else
+    eta_tag = strrep(sprintf('eta_%0.3f', eta_value), '.', 'p');
+    output_dir = ensure_data_directory_with_N(timestamp, N_input, eta_tag);
+    data_filename = sprintf('data_%s.mat', eta_tag);
+    temp_filename = fullfile(output_dir, sprintf('temp_%s.mat', eta_tag));
+    quicklook_prefix = sprintf('result_%s', eta_tag);
+end
+output_filename = fullfile(output_dir, data_filename);
 
 progress_queue = parallel.pool.DataQueue;
 afterEach(progress_queue, @(inc) update_progress(inc));
@@ -132,6 +160,15 @@ results.success_rate_matrix = success_rate_matrix;
 results.success_rate_per_pulse = success_rate_per_pulse;
 results.parallel_workers = pool.NumWorkers;
 results.matlab_version = version;
+% 记录噪声信息，便于后续检索
+results.parameters = params;
+if isempty(eta_value)
+    results.eta_value = sqrt(2 * params.angleNoiseIntensity);
+    results.eta_tag = '';
+else
+    results.eta_value = eta_value;
+    results.eta_tag = eta_tag;
+end
 
 save(output_filename, 'results', '-v7.3');
 fprintf('结果已保存至: %s\n', output_filename);
@@ -158,7 +195,7 @@ fprintf('Δc 峰值: %.4f (cj_threshold = %.2f, m = %d)\n', ...
 fprintf('平均分支比范围: [%.3f, %.3f]\n', ...
     min(b_mean(:, 1), [], 'omitnan'), max(b_mean(:, 1), [], 'omitnan'));
 
-quicklook_path = fullfile(output_dir, 'result');
+quicklook_path = fullfile(output_dir, quicklook_prefix);
 render_quicklook_figure_with_N(cj_thresholds, pulse_counts, c_mean, c_sem, ...
     delta_c, delta_sem, error_count, success_rate_matrix, num_runs, pool.NumWorkers, N_input, quicklook_path);
 
@@ -372,12 +409,18 @@ function [mean_values, std_values, sem_values] = compute_statistics_3d(raw_data)
     end
 end
 
-function output_dir = ensure_data_directory_with_N(timestamp, N_input)
+function output_dir = ensure_data_directory_with_N(timestamp, N_input, eta_tag)
+    % 根据是否提供 eta_tag 生成不同的子目录名
     base_dir = fullfile(pwd, 'data', 'experiments', 'delta_c_m_vs_1_scan');
     if ~isfolder(base_dir)
         mkdir(base_dir);
     end
-    output_dir = fullfile(base_dir, sprintf('N%d_%s', N_input, timestamp));
+    if nargin < 3 || isempty(eta_tag)
+        folder_name = sprintf('N%d_%s', N_input, timestamp);
+    else
+        folder_name = sprintf('N%d_%s_%s', N_input, eta_tag, timestamp);
+    end
+    output_dir = fullfile(base_dir, folder_name);
     if ~isfolder(output_dir)
         mkdir(output_dir);
     end
