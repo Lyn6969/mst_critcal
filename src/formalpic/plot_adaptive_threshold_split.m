@@ -1,12 +1,14 @@
 % plot_adaptive_threshold_split.m - Adaptive threshold responsiveness/persistence plots
+% 本脚本用于批量生成自适应阈值机制在响应性与持久性方面的关键统计图
+% 执行前需确保仿真依赖（ParticleSimulation* 系列类）已在路径下可用
 
 clear; clc; close all;
 
 %% -------------------- 图像与样式参数 --------------------
-FIG_SIZE_TRAJ = [400, 400];
-FIG_SIZE_SMALL = [400, 200];
+FIG_SIZE_TRAJ = [400, 400];   % 轨迹信息展示所需的方形画布尺寸
+FIG_SIZE_SMALL = [400, 200];  % 统计曲线类图形统一使用的瘦长画布
 
-style = struct();
+style = struct();  % 统一的字体、粗细等排版规范，保证最终制图一致性
 style.font_name = 'Arial';
 style.label_font_size = 12;
 style.label_font_weight = 'Bold';
@@ -15,7 +17,7 @@ style.tick_font_weight = 'Bold';
 style.axis_line_width = 1.5;
 style.shape = struct('head_radius', 0.25, 'tail_length', 0.45, 'tail_width', 0.12, 'resolution', 38);
 
-colors = struct();
+colors = struct();  % 归纳所有需要用到的颜色，方便集中调整
 colors.base = [0.7 0.7 0.7];
 colors.activated = [0.85 0.2 0.2];
 colors.external = [1.0 0.55 0.0];
@@ -31,7 +33,7 @@ colors.traj_red_start = [1.0 0.8 0.8];
 colors.traj_red_end = [0.65 0.0 0.0];
 
 %% -------------------- 仿真参数（与 visualize_adaptive_threshold 保持一致） --------------------
-params = struct();
+params = struct();  % 与仿真主脚本保持一致的核心参数配置
 params.N = 200;
 params.rho = 1;
 params.v0 = 1;
@@ -49,27 +51,27 @@ params.stabilization_steps = 200;
 params.forced_turn_duration = 200;
 params.useAdaptiveThreshold = true;
 
-time_marker = struct();
+time_marker = struct();  % 用于在所有时间序列图上标记稳定化结束的竖线
 time_marker.step = params.stabilization_steps;
 time_marker.color = [0.3 0.3 0.3];
 time_marker.line_style = '--';
 time_marker.line_width = 2;
 
-adaptive_cfg = struct();
+adaptive_cfg = struct();  % 自适应阈值的上下限与显著性筛选门限
 adaptive_cfg.cj_low = 0.5;
 adaptive_cfg.cj_high = 5;
 adaptive_cfg.saliency_threshold = 0.04;
 adaptive_cfg.include_self = true;
 params.adaptiveThresholdConfig = adaptive_cfg;
 
-pers_cfg = struct();
+pers_cfg = struct();  % 持久性拟合所需的烧入比例与拟合点阈值
 pers_cfg.burn_in_ratio = 0.5;
 pers_cfg.min_fit_points = 40;
 pers_cfg.min_diffusion = 1e-3;
 
-base_seed = 20250315;
-pers_seed = base_seed + 12345;
-time_vec = (0:params.T_max)' * params.dt;
+base_seed = 20250315;              % 响应性仿真随机种子，方便复现实验
+pers_seed = base_seed + 12345;     % 持久性仿真随机种子，通过偏移保持差异
+time_vec = (0:params.T_max)' * params.dt;  % 对应物理时间，用于积分与标注
 
 %% -------------------- 路径与依赖 --------------------
 script_dir = fileparts(mfilename('fullpath'));
@@ -81,9 +83,9 @@ end
 addpath(genpath(fullfile(project_root, 'src', 'sim')));
 
 %% -------------------- 数据采集 --------------------
-step_vec = (0:params.T_max)';
-resp_data = collect_responsiveness_data(params, time_vec, step_vec, base_seed);
-pers_data = collect_persistence_data(params, pers_cfg, step_vec, pers_seed);
+step_vec = (0:params.T_max)';  % 离散步数索引，与仿真内部计数保持一致
+resp_data = collect_responsiveness_data(params, time_vec, step_vec, base_seed);  % 抽取响应性相关的所有统计量
+pers_data = collect_persistence_data(params, pers_cfg, step_vec, pers_seed);    % 提取持久性所需的轨迹与MSD信息
 
 fprintf('Responsivity R = %.3f\n', resp_data.R_value);
 
@@ -186,8 +188,8 @@ fprintf('Figures saved to: %s\n', pic_dir);
 %% 辅助函数定义
 %% ========================================================================
 function data = collect_responsiveness_data(params, time_vec, step_vec, seed)
-    rng(seed);
-    sim = ParticleSimulationWithExternalPulse(params);
+    rng(seed);  % 锁定随机种子，确保图像可重复再现
+    sim = ParticleSimulationWithExternalPulse(params);  % 使用含外部脉冲的仿真器
     sim.external_pulse_count = 1;
     sim.resetCascadeTracking();
     sim.initializeParticles();
@@ -195,27 +197,27 @@ function data = collect_responsiveness_data(params, time_vec, step_vec, seed)
 
     T = params.T_max;
     N = params.N;
-    saliency_all = zeros(T + 1, N);
-    low_ratio = zeros(T + 1, 1);
-    active_ratio = zeros(T + 1, 1);
+    saliency_all = zeros(T + 1, N);   % 每一帧的显著性分布
+    low_ratio = zeros(T + 1, 1);      % 低阈值个体占比
+    active_ratio = zeros(T + 1, 1);   % 激活状态占比
     avg_threshold = zeros(T + 1, 1);
 
-    [saliency_all(1, :), low_ratio(1), avg_threshold(1)] = capture_saliency_snapshot(sim);
+    [saliency_all(1, :), low_ratio(1), avg_threshold(1)] = capture_saliency_snapshot(sim);  % 记录初态
     active_ratio(1) = mean(sim.isActive);
 
-    positions_history = zeros(T + 1, N, 2);
+    positions_history = zeros(T + 1, N, 2);  % 用于轨迹绘制的全量位置缓存
     positions_history(1, :, :) = sim.positions;
     V_history = zeros(T + 1, 2);
     V_history(1, :) = compute_average_velocity(sim.theta, params.v0);
     projection_history = zeros(T + 1, 1);
-    R_series = zeros(T + 1, 1);
+    R_series = zeros(T + 1, 1);  % 响应性随时间变化的序列
 
     triggered = false;
     t_start = NaN;
     n_vec = [];
     external_indices = [];
 
-    for t = 1:T
+    for t = 1:T  % 主仿真循环：推进粒子状态并采样统计量
         sim.step();
         positions_history(t + 1, :, :) = sim.positions;
         V_history(t + 1, :) = compute_average_velocity(sim.theta, params.v0);
@@ -248,7 +250,7 @@ function data = collect_responsiveness_data(params, time_vec, step_vec, seed)
     else
         T_window = params.forced_turn_duration;
         t_end = min(t_start + T_window, T);
-        integral_value = trapz(time_vec(t_start + 1:t_end + 1), projection_history(t_start + 1:t_end + 1));
+        integral_value = trapz(time_vec(t_start + 1:t_end + 1), projection_history(t_start + 1:t_end + 1));  % 数值积分衡量响应程度
         duration = time_vec(t_end + 1) - time_vec(t_start + 1);
         if duration > 0
             R_val = integral_value / (params.v0 * duration);
@@ -259,7 +261,7 @@ function data = collect_responsiveness_data(params, time_vec, step_vec, seed)
         window_end_time = time_vec(t_end + 1);
     end
 
-    data = struct();
+    data = struct();  % 汇总所有中间量，方便后续绘图函数直接调用
     data.time_vec = time_vec;
     data.step_vec = step_vec;
     data.saliency_all = saliency_all;
@@ -280,7 +282,7 @@ function data = collect_responsiveness_data(params, time_vec, step_vec, seed)
 end
 
 function data = collect_persistence_data(params, cfg, step_vec, seed)
-    rng(seed);
+    rng(seed);          % 固定随机性，避免持久性评估结果漂移
     params_pers = params;
     removable = {'stabilization_steps', 'forced_turn_duration'};
     for k = 1:numel(removable)
@@ -289,7 +291,7 @@ function data = collect_persistence_data(params, cfg, step_vec, seed)
         end
     end
 
-    sim = ParticleSimulation(params_pers);
+    sim = ParticleSimulation(params_pers);  % 持久性分析不依赖外部脉冲
     sim.current_step = 0;
 
     T = sim.T_max;
@@ -297,7 +299,7 @@ function data = collect_persistence_data(params, cfg, step_vec, seed)
     dt = sim.dt;
     time_vec = (0:T)' * dt;
 
-    saliency_all = zeros(T + 1, N);
+    saliency_all = zeros(T + 1, N);  % 记录显著性演化
     low_ratio = zeros(T + 1, 1);
     active_ratio = zeros(T + 1, 1);
     [saliency_all(1, :), low_ratio(1)] = capture_saliency_snapshot(sim);
@@ -305,14 +307,14 @@ function data = collect_persistence_data(params, cfg, step_vec, seed)
 
     positions0 = sim.positions;
     centroid0 = mean(positions0, 1);
-    offsets0 = positions0 - centroid0;
+    offsets0 = positions0 - centroid0;  % 以初始质心为参考，方便计算 MSD
     centroid_path = zeros(T + 1, 2);
     centroid_path(1, :) = centroid0;
     msd_history = zeros(T + 1, 1);
     positions_history = zeros(T + 1, N, 2);
     positions_history(1, :, :) = sim.positions;
 
-    for t = 1:T
+    for t = 1:T  % 持续推进粒子系统，并累积质心轨迹和 MSD
         sim.step();
         positions_history(t + 1, :, :) = sim.positions;
         positions = sim.positions;
@@ -327,7 +329,7 @@ function data = collect_persistence_data(params, cfg, step_vec, seed)
         active_ratio(t + 1) = mean(sim.isActive);
     end
 
-    burn_in_index = max(2, floor((T + 1) * cfg.burn_in_ratio));
+    burn_in_index = max(2, floor((T + 1) * cfg.burn_in_ratio));  % 烧入阶段剔除早期波动
     [P_value, D_value, fit_time, fit_curve] = compute_persistence_metrics(time_vec, msd_history, burn_in_index, cfg);
 
     data = struct();
@@ -353,6 +355,7 @@ function data = collect_persistence_data(params, cfg, step_vec, seed)
 end
 
 function [saliency_vec, ratio_low, avg_threshold] = capture_saliency_snapshot(sim)
+    % 该函数从仿真对象中抽取当前帧的显著性与阈值占比信息
     if sim.useAdaptiveThreshold && ~isempty(sim.cj_threshold_dynamic)
         saliency_vec = sim.local_saliency_state(:)';
         thresholds_current = sim.cj_threshold_dynamic;
@@ -367,12 +370,13 @@ function [saliency_vec, ratio_low, avg_threshold] = capture_saliency_snapshot(si
     else
         low_bound = sim.cj_threshold;
     end
-    ratio_low = mean(thresholds_current <= low_bound + 1e-6);
-    avg_threshold = mean(thresholds_current);
+    ratio_low = mean(thresholds_current <= low_bound + 1e-6);  % 判定处于低阈值状态的粒子比例
+    avg_threshold = mean(thresholds_current);                  % 记录整体阈值水平，便于诊断
 end
 
 function plot_responsiveness_state(ax, resp_data, style, colors)
-    hold(ax, 'on');
+    % 绘制响应性分析场景，包括不同类别粒子轨迹和最终指向
+    hold(ax, 'on');  % 同一坐标系绘制轨迹与最终位置
     pos_hist = resp_data.positions_history;
     pos_final = resp_data.final_positions;
     theta_final = resp_data.final_theta;
@@ -386,9 +390,9 @@ function plot_responsiveness_state(ax, resp_data, style, colors)
     mask_activated(mask_external) = false;
     mask_base = ~(mask_activated | mask_external);
 
-    draw_category_traj(ax, pos_hist, mask_base, colors.traj_gray_start, colors.traj_gray_end, 1.0, 0.25);
-    draw_category_traj(ax, pos_hist, mask_activated, colors.traj_gray_start, colors.traj_gray_end, 1.2, 0.32);
-    draw_category_traj(ax, pos_hist, mask_external, colors.traj_red_start, colors.traj_red_end, 1.8, 0.55);
+    draw_category_traj(ax, pos_hist, mask_base, colors.traj_gray_start, colors.traj_gray_end, 1.0, 0.25);      % 基础个体轨迹
+    draw_category_traj(ax, pos_hist, mask_activated, colors.traj_gray_start, colors.traj_gray_end, 1.2, 0.32);  % 被连锁激活的个体轨迹
+    draw_category_traj(ax, pos_hist, mask_external, colors.traj_red_start, colors.traj_red_end, 1.8, 0.55);     % 外部脉冲直接作用的个体
 
     draw_agents(ax, pos_final(mask_base, :), theta_final(mask_base), colors.base, style.shape);
     draw_agents(ax, pos_final(mask_activated, :), theta_final(mask_activated), colors.active_ratio, style.shape);
@@ -402,7 +406,8 @@ function plot_responsiveness_state(ax, resp_data, style, colors)
 end
 
 function plot_persistence_state(ax, pers_data, style, colors)
-    hold(ax, 'on');
+    % 可视化持久性场景，展示群体整体迁移轨迹与质心迁移
+    hold(ax, 'on');  % 绘制所有粒子的轨迹以及质心路径
     pos_hist = pers_data.positions_history;
     pos_final = pers_data.final_positions;
     theta_final = pers_data.final_theta;
@@ -412,8 +417,8 @@ function plot_persistence_state(ax, pers_data, style, colors)
     draw_agents(ax, pos_final, theta_final, colors.base, style.shape);
     plot(ax, pers_data.centroid_path(:,1), pers_data.centroid_path(:,2), '-', 'LineWidth', 1.6, ...
         'Color', [0.15 0.35 0.8]);
-    scatter(ax, pers_data.centroid_path(1,1), pers_data.centroid_path(1,2), 55, [0.1 0.6 0.3], 'filled');
-    scatter(ax, pers_data.centroid_path(end,1), pers_data.centroid_path(end,2), 65, [0.85 0.2 0.2], 'filled');
+    scatter(ax, pers_data.centroid_path(1,1), pers_data.centroid_path(1,2), 55, [0.1 0.6 0.3], 'filled');   % 质心起点
+    scatter(ax, pers_data.centroid_path(end,1), pers_data.centroid_path(end,2), 65, [0.85 0.2 0.2], 'filled'); % 质心终点
     if ~isnan(pers_data.P_value)
         text(ax, field_size - 15, field_size - 4, sprintf('P = %.3f', pers_data.P_value), ...
             'FontName', style.font_name, 'FontWeight', 'bold', 'FontSize', 12, 'Color', [0.15 0.35 0.8]);
@@ -424,11 +429,12 @@ function plot_persistence_state(ax, pers_data, style, colors)
 end
 
 function plot_saliency_series(ax, time_vec, saliency_all, saliency_mean, mean_color, style)
+    % 将单个个体的显著性轨迹与整体均值叠加，突出群体态势
     base_color = [0.75 0.75 0.75];
     hold_state = ishold(ax);
     hold(ax, 'on');
-    plot(ax, time_vec, saliency_all, 'Color', base_color, 'LineWidth', 0.4, 'HandleVisibility', 'off');
-    plot(ax, time_vec, saliency_mean, 'LineWidth', 2.4, 'Color', mean_color, 'HandleVisibility', 'off');
+    plot(ax, time_vec, saliency_all, 'Color', base_color, 'LineWidth', 0.4, 'HandleVisibility', 'off');  % 灰色背景表示每个个体
+    plot(ax, time_vec, saliency_mean, 'LineWidth', 2.4, 'Color', mean_color, 'HandleVisibility', 'off'); % 粗线强调全局均值
 
     legend_handles = gobjects(2,1);
     legend_handles(1) = plot(ax, NaN, NaN, 'Color', base_color, 'LineWidth', 0.8, ...
@@ -446,6 +452,7 @@ function plot_saliency_series(ax, time_vec, saliency_all, saliency_mean, mean_co
 end
 
 function draw_category_traj(ax, pos_hist, mask, color_start, color_end, line_width, alpha)
+    % 根据掩码选择不同类别粒子，绘制颜色渐变的完整轨迹
     if isempty(mask) || ~any(mask)
         return;
     end
@@ -460,6 +467,7 @@ function draw_category_traj(ax, pos_hist, mask, color_start, color_end, line_wid
 end
 
 function draw_agents(ax, positions, theta, color, shape)
+    % 逐个绘制粒子形状，使最终状态细节更清晰
     if isempty(positions)
         return;
     end
@@ -472,6 +480,7 @@ function draw_agents(ax, positions, theta, color, shape)
 end
 
 function draw_agent_shape(ax, position, heading, color, shape)
+    % 通过矩形尾翼 + 圆形头部组合，形成带方向性的“鱼”型粒子
     tail_corners = [
         0, -shape.tail_width/2;
         shape.tail_length, -shape.tail_width/2;
@@ -491,6 +500,7 @@ function draw_agent_shape(ax, position, heading, color, shape)
 end
 
 function draw_gradient_line(ax, x, y, color_start, color_end, line_width, edge_alpha)
+    % 通过 patch 将轨迹拆分为线段并插值颜色，呈现方向感
     if numel(x) < 2 || numel(y) < 2
         return;
     end
@@ -506,7 +516,7 @@ function draw_gradient_line(ax, x, y, color_start, color_end, line_width, edge_a
     num_points = numel(x);
     t = linspace(0, 1, num_points - 1).';
     colors = (1 - t) .* color_start + t .* color_end;
-    for idx = 1:num_points-1
+    for idx = 1:num_points-1  % 将轨迹拆分为线段并逐段插入，从而实现颜色渐变
         patch('Parent', ax, 'XData', [x(idx), x(idx+1)], 'YData', [y(idx), y(idx+1)], ...
             'ZData', [0, 0], 'FaceColor', 'none', 'EdgeColor', colors(idx, :), ...
             'LineWidth', line_width, 'EdgeAlpha', edge_alpha);
@@ -514,6 +524,7 @@ function draw_gradient_line(ax, x, y, color_start, color_end, line_width, edge_a
 end
 
 function add_time_marker(ax, marker_cfg)
+    % 在时间序列图中统一绘制稳定化结束步的竖线，避免读图歧义
     if nargin < 2 || isempty(marker_cfg)
         return;
     end
@@ -542,6 +553,7 @@ function add_time_marker(ax, marker_cfg)
 end
 
 function apply_state_style(ax, style, field_size)
+    % 限定场景坐标系、加粗坐标轴，确保打印版图像清晰
     lim = min(50, field_size);
     axis(ax, [0 lim 0 lim]);
     xticks(ax, 0:10:lim);
@@ -559,6 +571,7 @@ function apply_state_style(ax, style, field_size)
 end
 
 function apply_series_style(ax, style, ylabel_txt)
+    % 对所有时间序列类图统一设置字体/刻度/坐标轴样式
     grid(ax, 'off');
     ax.LineWidth = style.axis_line_width;
     ax.FontName = style.font_name;
@@ -571,15 +584,17 @@ function apply_series_style(ax, style, ylabel_txt)
 end
 
 function export_and_close(fig_handle, file_path)
-    exportgraphics(fig_handle, file_path, 'ContentType', 'vector');
+    exportgraphics(fig_handle, file_path, 'ContentType', 'vector');  % 默认导出矢量，便于后期排版
     fprintf('Saved figure: %s\n', file_path);
 end
 
 function V = compute_average_velocity(theta, v0)
+    % 根据所有粒子朝向求得群体平均速度向量
     V = [mean(v0 * cos(theta)), mean(v0 * sin(theta))];
 end
 
 function [P_value, D_value, fit_time, fit_curve] = compute_persistence_metrics(time_vec, msd, burn_in_index, cfg)
+    % 依据 MSD 曲线拟合扩散系数，再反推出持久性指标 P
     x = time_vec(burn_in_index:end);
     y = msd(burn_in_index:end);
 
@@ -591,7 +606,7 @@ function [P_value, D_value, fit_time, fit_curve] = compute_persistence_metrics(t
         x_shift = x - x(1);
         y_shift = y - y(1);
         if any(x_shift > 0) && any(abs(y_shift) > eps)
-            smooth_window = max(5, floor(numel(y_shift) * 0.1));
+            smooth_window = max(5, floor(numel(y_shift) * 0.1));  % 使用滑动平均降低噪声
             if smooth_window > 1
                 y_shift = smoothdata(y_shift, 'movmean', smooth_window);
             end
@@ -607,7 +622,7 @@ function [P_value, D_value, fit_time, fit_curve] = compute_persistence_metrics(t
         P_value = NaN;
         fit_curve(:) = NaN;
     else
-        D_value = max(D_value, cfg.min_diffusion);
+        D_value = max(D_value, cfg.min_diffusion);  % 避免零扩散导致的发散
         P_value = 1 / sqrt(D_value);
     end
 end
