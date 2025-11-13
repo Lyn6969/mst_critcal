@@ -44,10 +44,10 @@ TICK_DIR = 'in';
 %% -------------------- 数据路径 --------------------
 % TODO: 修改为实际文件名
 resp_dir = fullfile('results', 'responsiveness');
-resp_file = 'responsiveness_cj_scan_20251111_173907_eta_0p300.mat';
+resp_file = 'responsiveness_cj_scan_20251111_173757_eta_0p250.mat';
 
 pers_dir = fullfile('results', 'persistence');
-pers_file = 'persistence_cj_scan_20251111_203538_eta_0p300.mat';
+pers_file = 'persistence_cj_scan_20251111_203431_eta_0p250.mat';
 
 script_dir = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(script_dir));

@@ -25,7 +25,7 @@ SHADE_ALPHA = 0.25;        % 阴影透明度
 %% -------------------- 数据路径配置 --------------------
 % TODO: 根据实际结果文件更新时间戳
 results_dir = fullfile('results', 'responsiveness');
-mat_file = 'responsiveness_cj_scan_20251111_173907_eta_0p300.mat';
+mat_file = 'responsiveness_cj_scan_20251111_173757_eta_0p250.mat';
 
 % 计算项目根目录路径
 script_dir = fileparts(mfilename('fullpath'));

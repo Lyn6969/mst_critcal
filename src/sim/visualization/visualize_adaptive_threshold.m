@@ -23,7 +23,7 @@ params.N = 200;
 params.rho = 1;
 params.v0 = 1;
 params.angleUpdateParameter = 10;
-params.angleNoiseIntensity = 0.05;
+params.angleNoiseIntensity = 0.045;
 params.T_max = 400;
 params.dt = 0.1;
 params.radius = 5;
@@ -39,17 +39,17 @@ params.useAdaptiveThreshold = true;
 adaptive_cfg = struct();
 adaptive_cfg.cj_low = 0.5;
 adaptive_cfg.cj_high = 5;
-adaptive_cfg.saliency_threshold = 0.031;  % 邻域显著性方差阈值
+adaptive_cfg.saliency_threshold = 0.04;  % 邻域显著性方差阈值
 adaptive_cfg.include_self = true;
 params.adaptiveThresholdConfig = adaptive_cfg;
 
 pers_cfg = struct();
 pers_cfg.burn_in_ratio = 0.5;
 pers_cfg.min_fit_points = 40;
-pers_cfg.min_diffusion = 1e-4;
+pers_cfg.min_diffusion = 1e-3;
 
 num_angles = 1;         % 仅沿领导方向计算 r(phi)
-base_seed = 20250319;   % 用固定种子保证可复现
+base_seed = 20250315;   % 用固定种子保证可复现
 
 time_vec = (0:params.T_max)' * params.dt;
 

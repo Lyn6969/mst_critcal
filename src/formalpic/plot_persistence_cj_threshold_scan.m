@@ -24,7 +24,7 @@ SHADE_ALPHA = 0.25;        % 阴影透明度
 %% -------------------- 数据路径配置 --------------------
 % TODO: 将下列文件名替换为实际的时间戳文件
 results_dir = fullfile('results', 'persistence');
-mat_file = 'persistence_cj_scan_20251111_203538_eta_0p300.mat';
+mat_file = 'persistence_cj_scan_20251111_203431_eta_0p250.mat';
 
 script_dir = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(script_dir));
