@@ -198,16 +198,14 @@ summary.P_range = P_range;
 summary.matlab_version = version;
 summary.base_seed = base_seed;
 
-save(output_mat, 'summary', '-v7.3');
-fprintf('数据已保存至: %s\n', output_mat);
-
-%% 运行结束后输出：响应性增益（自适应 vs 最近邻固定阈值）
+%% 运行结束后：计算并记录响应性增益（自适应 vs 最近邻固定阈值）
 % 计算方法：以归一化持久性 P_mean_norm 为度量，选取与自适应点最接近的固定阈值点，
-%           计算 R 的比值增益 = R_adapt / R_fixed_nearest，并输出百分比。
+%           计算 R 的比值增益 = R_adapt / R_fixed_nearest，并写入 summary.metrics，同时在控制台输出。
+summary.metrics = struct();
 try
     fixed = results.fixed;
     adaptive = results.adaptive;
-    % 自适应点
+    % 自适应点（目前仅一个参数点）
     R_adapt = adaptive.R_mean(1);
     P_adapt = adaptive.P_mean_norm(1);
     % 最近邻（按归一化持久性匹配）
@@ -216,14 +214,32 @@ try
     P_ref = fixed.P_mean_norm(idx_ref);
     if ~isnan(R_adapt) && ~isnan(R_ref) && R_ref > 0
         resp_gain = R_adapt / R_ref;
+        summary.metrics.R_adapt = R_adapt;
+        summary.metrics.R_ref = R_ref;
+        summary.metrics.P_adapt = P_adapt;
+        summary.metrics.P_ref = P_ref;
+        summary.metrics.resp_gain = resp_gain;
         fprintf('响应性增益（自适应 vs 最近邻固定）：%.2f%%  (R_adapt=%.3f, R_fixed=%.3f, P_match=%.3f)\n', ...
             (resp_gain - 1) * 100, R_adapt, R_ref, P_ref);
     else
+        summary.metrics.R_adapt = R_adapt;
+        summary.metrics.R_ref = R_ref;
+        summary.metrics.P_adapt = P_adapt;
+        summary.metrics.P_ref = P_ref;
+        summary.metrics.resp_gain = NaN;
         fprintf('响应性增益无法计算：R_adapt 或 R_fixed 无效。\n');
     end
 catch ME
     warning('计算响应性增益失败：%s', ME.message);
+    summary.metrics.R_adapt = NaN;
+    summary.metrics.R_ref = NaN;
+    summary.metrics.P_adapt = NaN;
+    summary.metrics.P_ref = NaN;
+    summary.metrics.resp_gain = NaN;
 end
+
+save(output_mat, 'summary', '-v7.3');
+fprintf('数据已保存至: %s\n', output_mat);
 
 %% ===============================================================================
 % 子函数：运行单个模式的完整实验（使用共享随机种子）
