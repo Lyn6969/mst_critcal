@@ -434,7 +434,8 @@ function pool = configure_parallel_pool()
     pool = gcp('nocreate');
     if isempty(pool)
         cluster = parcluster('local');
-        max_workers = min(cluster.NumWorkers, 40);
+        % 允许最多使用 200 个 worker，但不超过本机可用核心数
+        max_workers = min(cluster.NumWorkers, 200);
         if max_workers < 1
             error('没有可用的并行工作线程。');
         end
