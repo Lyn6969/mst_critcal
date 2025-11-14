@@ -24,6 +24,7 @@ N_value = 200;
 % 需要扫描的噪声幅度 η 列表
 eta_values = [0.20, 0.25, 0.30];
 num_levels = numel(eta_values);
+repeat_times = 5;  % 每个噪声幅度重复运行的次数
 
 fprintf('=================================================\n');
 fprintf('  批量运行 Delta_c (1 vs m) 扫描\n');
@@ -31,22 +32,87 @@ fprintf('  N = %d\n', N_value);
 fprintf('  噪声 η 列表: %s\n', mat2str(eta_values));
 fprintf('=================================================\n\n');
 
-results_all = cell(num_levels, 1);
+results_all = cell(num_levels, repeat_times);
+peak_summary(repeat_times * num_levels) = struct( ...
+    'eta', NaN, 'repeat', NaN, 'peak_value', NaN, 'peak_threshold', NaN);
+summary_idx = 0;
 
 for idx = 1:num_levels
     eta_value = eta_values(idx);
-    fprintf('>>> [%d/%d] 运行 η = %.3f\n', idx, num_levels, eta_value);
+    for rep = 1:repeat_times
+        fprintf('>>> η = %.3f | 第 %d/%d 次运行 (%d/%d 噪声)\n', ...
+            eta_value, rep, repeat_times, idx, num_levels);
 
-    % 调用带 η 支持的扫描函数
-    results = run_delta_c_m_vs_1_scan_parallel_with_N(N_value, eta_value);
-    results_all{idx} = results;
+        results = run_delta_c_m_vs_1_scan_parallel_with_N(N_value, eta_value);
+        results_all{idx, rep} = results;
 
-    if isfield(results, 'timestamp')
-        fprintf('    η = %.3f 完成，时间戳 %s。\n\n', eta_value, results.timestamp);
-    else
-        fprintf('    η = %.3f 完成。\n\n', eta_value);
+        [peak_value, peak_threshold] = compute_delta_peak_from_results(results);
+        summary_idx = summary_idx + 1;
+        peak_summary(summary_idx) = struct( ...
+            'eta', eta_value, ...
+            'repeat', rep, ...
+            'peak_value', peak_value, ...
+            'peak_threshold', peak_threshold);
+
+        if isfield(results, 'timestamp')
+            fprintf('    η = %.3f 第 %d 次完成，时间戳 %s。\n', ...
+                eta_value, rep, results.timestamp);
+        else
+            fprintf('    η = %.3f 第 %d 次完成。\n', eta_value, rep);
+        end
+
+        if ~isnan(peak_value)
+            fprintf('    Δc 峰值 = %.4f，对应阈值 M_T = %.4f。\n\n', ...
+                peak_value, peak_threshold);
+        else
+            fprintf('    Δc 峰值计算失败（数据为空或均为 NaN）。\n\n');
+        end
     end
 end
 
 fprintf('所有 η 水平的 Delta_c (1 vs m) 扫描已完成。\n');
 
+fprintf('\nΔc 峰值汇总：\n');
+for idx = 1:summary_idx
+    info = peak_summary(idx);
+    if isnan(info.peak_value)
+        fprintf('  η = %.3f | 第 %d 次 → 无有效峰值。\n', info.eta, info.repeat);
+    else
+        fprintf('  η = %.3f | 第 %d 次 → 峰值 %.4f @ M_T = %.4f\n', ...
+            info.eta, info.repeat, info.peak_value, info.peak_threshold);
+    end
+end
+
+function [peak_value, peak_threshold] = compute_delta_peak_from_results(results)
+%COMPUTE_DELTA_PEAK_FROM_RESULTS 从结果结构中计算 Δc 峰值及其阈值
+    peak_value = NaN;
+    peak_threshold = NaN;
+
+    if ~isfield(results, 'delta_c') || isempty(results.delta_c)
+        return;
+    end
+    if ~isfield(results, 'cj_thresholds') || isempty(results.cj_thresholds)
+        return;
+    end
+
+    delta_matrix = results.delta_c;
+    thresholds = results.cj_thresholds(:);
+    if isempty(delta_matrix) || isempty(thresholds)
+        return;
+    end
+
+    tmp = delta_matrix;
+    tmp(~isfinite(tmp)) = -inf;
+    [max_value, lin_idx] = max(tmp(:));
+    if isinf(max_value)
+        return;
+    end
+
+    [row_idx, ~] = ind2sub(size(tmp), lin_idx);
+    if row_idx > numel(thresholds)
+        return;
+    end
+
+    peak_value = max_value;
+    peak_threshold = thresholds(row_idx);
+end

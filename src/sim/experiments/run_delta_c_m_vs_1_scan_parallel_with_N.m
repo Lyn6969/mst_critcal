@@ -72,16 +72,14 @@ timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
 if isempty(eta_value)
     eta_tag = '';
     output_dir = ensure_data_directory_with_N(timestamp, N_input);
-    data_filename = 'data.mat';
-    temp_filename = fullfile(output_dir, 'temp.mat');
-    quicklook_prefix = 'result';
 else
     eta_tag = strrep(sprintf('eta_%0.3f', eta_value), '.', 'p');
     output_dir = ensure_data_directory_with_N(timestamp, N_input, eta_tag);
-    data_filename = sprintf('data_%s.mat', eta_tag);
-    temp_filename = fullfile(output_dir, sprintf('temp_%s.mat', eta_tag));
-    quicklook_prefix = sprintf('result_%s', eta_tag);
 end
+
+data_filename = 'data.mat';
+temp_filename = fullfile(output_dir, 'temp.mat');
+quicklook_prefix = 'result';
 output_filename = fullfile(output_dir, data_filename);
 
 progress_queue = parallel.pool.DataQueue;
