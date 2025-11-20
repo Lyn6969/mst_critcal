@@ -135,11 +135,11 @@ apply_series_style(ax_resp_metric, style, 'Responsivity');
 export_and_close(resp_metric_fig, resp_metric_path);
 
 % 6. 持久性：粒子状态 + 质心轨迹
-% pers_state_path = fullfile(pic_dir, 'adaptive_pers_state.pdf');
-% pers_state_fig = figure('Color', 'white', 'Position', [280, 280, FIG_SIZE_TRAJ]);
-% ax_pers_state = axes('Parent', pers_state_fig);
-% plot_persistence_state(ax_pers_state, pers_data, style, colors);
-% export_and_close(pers_state_fig, pers_state_path);
+pers_state_path = fullfile(pic_dir, 'adaptive_pers_state.pdf');
+pers_state_fig = figure('Color', 'white', 'Position', [280, 280, FIG_SIZE_TRAJ]);
+ax_pers_state = axes('Parent', pers_state_fig);
+plot_persistence_state(ax_pers_state, pers_data, style, colors);
+export_and_close(pers_state_fig, pers_state_path);
 
 % 7. 持久性：显著性方差演化
 pers_saliency_path = fullfile(pic_dir, 'adaptive_pers_saliency.pdf');

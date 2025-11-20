@@ -187,6 +187,6 @@ cb_norm.FontSize = TICK_FONT_SIZE;
 cb_norm.LineWidth = COLORBAR_LINE_WIDTH;
 clim(ax_norm, [0, 1]);
 
-exportgraphics(fig_norm, output_path_norm, 'ContentType', 'vector');
-
-fprintf('归一化持久性热力图已保存至: %s\n', output_path_norm);
+% exportgraphics(fig_norm, output_path_norm, 'ContentType', 'vector');
+% 
+% fprintf('归一化持久性热力图已保存至: %s\n', output_path_norm);
