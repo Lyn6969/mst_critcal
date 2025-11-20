@@ -425,15 +425,15 @@ function [mean_values, std_values, sem_values] = compute_statistics_3d(raw_data)
 end
 
 function output_dir = ensure_data_directory_with_N(timestamp, N_input, eta_tag)
-    % 根据是否提供 eta_tag 生成不同的子目录名
+    % 根据是否提供 eta_tag 生成不同的子目录名；区别标识 unique
     base_dir = fullfile(pwd, 'data', 'experiments', 'delta_c_m_vs_1_scan');
     if ~isfolder(base_dir)
         mkdir(base_dir);
     end
     if nargin < 3 || isempty(eta_tag)
-        folder_name = sprintf('N%d_%s', N_input, timestamp);
+        folder_name = sprintf('N%d_unique_%s', N_input, timestamp);
     else
-        folder_name = sprintf('N%d_%s_%s', N_input, eta_tag, timestamp);
+        folder_name = sprintf('N%d_unique_%s_%s', N_input, eta_tag, timestamp);
     end
     output_dir = fullfile(base_dir, folder_name);
     if ~isfolder(output_dir)
