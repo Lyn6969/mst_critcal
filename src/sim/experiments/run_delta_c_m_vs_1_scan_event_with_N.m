@@ -249,8 +249,11 @@ function [ratio, cascade_size] = compute_branching_ratio_with_cascade(sim, pulse
     sim.external_pulse_count = pulse_count;
     sim.current_step = 0;
 
-    parent_event_count = 0;    % 分母：父事件总数
-    children_event_sum = 0;    % 分子：子事件总数
+    % 分母：父事件次数（按“父节点激活轮次”区分，同一节点多次再激活会视为不同父事件）
+    parent_activation_id = zeros(sim.N, 1);   % 每个节点的激活轮次计数（事件级）
+    parent_event_keys = zeros(0, 2);           % [parent_idx, activation_id] 列表
+    % 分子：子事件总数（有父节点的激活事件数）
+    children_event_sum = 0;
 
     counting_enabled = false;
     tracking_deadline = sim.T_max;
@@ -272,12 +275,13 @@ function [ratio, cascade_size] = compute_branching_ratio_with_cascade(sim, pulse
         end
 
         newly_active = sim.isActive & ~prev_active;
+        % 新激活个体的激活轮次自增（作为事件 ID）
+        if any(newly_active)
+            parent_activation_id(newly_active) = parent_activation_id(newly_active) + 1;
+        end
 
         if counting_enabled && sim.current_step <= tracking_deadline && any(newly_active)
             activated_indices = find(newly_active);
-
-            % 每个激活事件计为一个父事件；父子均按“事件”计数
-            parent_event_count = parent_event_count + numel(activated_indices);
 
             for idx = activated_indices'
                 parent = sim.src_ids{idx};
@@ -285,8 +289,9 @@ function [ratio, cascade_size] = compute_branching_ratio_with_cascade(sim, pulse
                     parent_idx = parent(1);
                     if parent_idx >= 1 && parent_idx <= sim.N
                         parent_idx = round(parent_idx);
-                        % 父事件 +1，子事件 +1（事件级，无去重）
                         children_event_sum = children_event_sum + 1;
+                        % 记录父事件键：父节点 + 其当前激活轮次
+                        parent_event_keys(end+1, :) = [parent_idx, parent_activation_id(parent_idx)]; %#ok<AGROW>
                     end
                 end
             end
@@ -297,6 +302,11 @@ function [ratio, cascade_size] = compute_branching_ratio_with_cascade(sim, pulse
         end
     end
 
+    if isempty(parent_event_keys)
+        parent_event_count = 0;
+    else
+        parent_event_count = size(unique(parent_event_keys, 'rows'), 1);
+    end
     if parent_event_count == 0
         ratio = 0;
     else

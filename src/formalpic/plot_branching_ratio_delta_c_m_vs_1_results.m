@@ -53,8 +53,7 @@ VERTICAL_LINE_COLOR = [0.85, 0, 0];          % 垂直参考线颜色（红色）
 % 数据文件和目录路径设置
 mat_file = 'data.mat';  % 数据文件名
 % TODO: 根据实际结果目录更新以下路径
-mat_dir = fullfile( 'data', 'experiments', 'batch_delta_c_m_vs_1', '20251101_003447',...
-    'N200_run14_20251101_051202');  % 示例目录，请替换为真实时间戳
+mat_dir = fullfile( 'data', 'experiments', 'delta_c_m_vs_1_scan', 'N200_unique_eta_0p000_20251120_220728');  % 示例目录，请替换为真实时间戳
 
 % 获取脚本所在目录和项目根目录（用于构建绝对路径）
 script_dir = fileparts(mfilename('fullpath'));  % 获取当前脚本所在目录
@@ -162,7 +161,7 @@ ylim_upper = max(max(mean_values + abs(sem_values)) * 1.1, 1.1);  % 上限为数
 ylim(ax, [0, ylim_upper]);  % y轴范围从0到计算的上限
 
 hold(ax, 'off');  % 结束图形保持状态
-
-% 导出图形为PDF矢量格式
-exportgraphics(fig, output_path, 'ContentType', 'vector');
-fprintf('Branching ratio plot saved to: %s\n', output_path);
+% 
+% % 导出图形为PDF矢量格式
+% exportgraphics(fig, output_path, 'ContentType', 'vector');
+% fprintf('Branching ratio plot saved to: %s\n', output_path);

@@ -315,7 +315,8 @@ function [ratio, cascade_size] = compute_branching_ratio_with_cascade(sim, pulse
     if ~counting_enabled
         ratio = 0;
     else
-        parents = find(parent_flags);
+        % 仅统计“实际产生过子代的父节点”，避免叶子和种子压低分支比
+        parents = find(children_count > 0);
         if isempty(parents)
             ratio = 0;
         else
