@@ -264,7 +264,7 @@ function data = simulate_persistence_process(params, cfg)
     data.fit_curve = fit_curve;
     data.burn_in_time = time_vec(burn_in_idx);
     data.P_value = P_value;
-    data.D_value = slope;
+    data.D_value = slope / 4;  % 二维扩散修正
 end
 
 function indices = select_trajectory_indices(num_agents, max_count)

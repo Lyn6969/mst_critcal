@@ -442,7 +442,7 @@ function [P_value, D_value] = run_single_persistence_trial(params, cfg, seed)
             if slope <= 0
                 D_value = NaN;
             else
-                D_value = slope;
+                D_value = slope / 4;  % 二维扩散修正
             end
         else
             D_value = NaN;

@@ -465,7 +465,7 @@ function [P_value, D_value, fit_time, fit_curve] = compute_persistence_metrics(t
             end
             slope = lsqnonneg(x_shift(:), y_shift(:));
             if slope > 0
-                D_value = slope;
+                D_value = slope / 4;  % 二维扩散修正
                 fit_curve = y(1) + slope * x_shift;
             end
         end

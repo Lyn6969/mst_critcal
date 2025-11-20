@@ -318,7 +318,7 @@ function [D_value, P_value] = run_single_trial(base_params, cj_value, noise_valu
             if slope <= 0
                 D_value = NaN;
             else
-                D_value = slope;
+                D_value = slope / 4;  % 二维扩散：MSD 斜率=4D
             end
         else
             D_value = NaN;

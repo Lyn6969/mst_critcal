@@ -269,12 +269,12 @@ function [P_value, D_value] = run_single_persistence_trial(params, cfg, seed)
                 y_shift = smoothdata(y_shift, 'movmean', smooth_window);
             end
             
-            % 非负最小二乘拟合：MSD = D*t（一维扩散，注意与第一个文件的区别）
+            % 非负最小二乘拟合：MSD = 4Dt（二维各向同性扩散）
             slope = lsqnonneg(x_shift(:), y_shift(:));
             if slope <= 0
                 D_value = NaN;             % 拟合结果无效
             else
-                D_value = slope;           % 扩散系数（一维情况下MSD = Dt）
+                D_value = slope / 4;       % 二维扩散系数：斜率=4D → D = slope/4
             end
         else
             D_value = NaN;                 % 数据无效
