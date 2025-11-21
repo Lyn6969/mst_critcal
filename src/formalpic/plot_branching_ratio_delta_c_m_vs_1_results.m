@@ -53,7 +53,7 @@ VERTICAL_LINE_COLOR = [0.85, 0, 0];          % 垂直参考线颜色（红色）
 % 数据文件和目录路径设置
 mat_file = 'data.mat';  % 数据文件名
 % TODO: 根据实际结果目录更新以下路径
-mat_dir = fullfile( 'data', 'experiments', 'delta_c_m_vs_1_scan', 'N200_unique_eta_0p000_20251120_220728');  % 示例目录，请替换为真实时间戳
+mat_dir = fullfile( 'data', 'experiments', 'delta_c_m_vs_1_scan', 'N200_generation_eta_0p000_20251120_233736');  % 示例目录，请替换为真实时间戳
 
 % 获取脚本所在目录和项目根目录（用于构建绝对路径）
 script_dir = fileparts(mfilename('fullpath'));  % 获取当前脚本所在目录
@@ -96,6 +96,9 @@ sem_values = branching_sem(:, target_idx);   % 目标初发个体数对应的分
 
 % 计算 M_T < 1 区间内最接近分支比 1 的阈值位置
 mt_mask = thresholds < 1;
+critical_mt = NaN;
+ratio_at_critical = NaN;
+diff_from_one = NaN;
 if any(mt_mask)
     thresholds_lt1 = thresholds(mt_mask);
     mean_lt1 = mean_values(mt_mask);
@@ -108,6 +111,48 @@ if any(mt_mask)
 else
     critical_mt = NaN;
     warning('未找到 M_T < 1 的有效样本，无法绘制垂直参考线。');
+end
+
+%% -------------------- 将用于绘图的分支比数据写入 JSON --------------------
+% JSON 中记录的信息包括：
+%   - N：系统规模
+%   - TARGET_PULSE：初发个体数
+%   - thresholds：横轴 M_T 数组
+%   - branching_mean：对应的平均分支比
+%   - branching_sem：对应的标准误
+%   - critical_mt / ratio_at_critical / diff_from_one：M_T<1 区间内最接近 1 的信息
+
+% 数据来源目录的绝对路径（即 data.mat 所在目录）
+data_dir_abs = fileparts(mat_path_abs);
+
+json_data = struct();
+json_data.description = results.description;
+if isfield(results, 'parameters') && isfield(results.parameters, 'N')
+    json_data.N = results.parameters.N;
+else
+    json_data.N = NaN;
+end
+json_data.target_pulse = TARGET_PULSE;
+json_data.thresholds = thresholds(:).';         % 行向量形式
+json_data.branching_mean = mean_values(:).';    % 行向量形式
+json_data.branching_sem = sem_values(:).';      % 行向量形式
+json_data.critical_mt = critical_mt;
+json_data.ratio_at_critical = ratio_at_critical;
+json_data.diff_from_one = diff_from_one;
+
+json_text = jsonencode(json_data, 'PrettyPrint', true);
+
+json_filename = sprintf('branching_ratio_curve_p%d_N%d.json', ...
+    TARGET_PULSE, json_data.N);
+json_path = fullfile(data_dir_abs, json_filename);
+
+fid = fopen(json_path, 'w');
+if fid == -1
+    warning('无法创建 JSON 文件：%s', json_path);
+else
+    fwrite(fid, json_text, 'char');
+    fclose(fid);
+    fprintf('分支比曲线数据已写入 JSON：%s\n', json_path);
 end
 
 %% -------------------- 图像输出目录 --------------------
